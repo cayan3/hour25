@@ -1,0 +1,23 @@
+# dependencies / build
+node_modules/
+dist/
+coverage/
+
+# environment — never commit real keys
+.env
+.env.*
+
+# private data
+tests/fixtures/local/
+docs/personal/
+
+# editor/OS noise
+.DS_Store
+*.local
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# playwright
+test-results/
+playwright-report/
