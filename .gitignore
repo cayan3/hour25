@@ -3,7 +3,7 @@ node_modules/
 dist/
 coverage/
 
-# environment — never commit real keys
+# environment
 .env
 .env.*
 
