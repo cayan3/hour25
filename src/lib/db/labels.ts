@@ -99,6 +99,43 @@ export async function softDeleteLabel(userId: string, id: string): Promise<Label
   return data[0];
 }
 
+export type UpdateLabelResult =
+  | { kind: 'updated'; label: LabelRow }
+  // Rename collides with another currently-active label (23505 from the
+  // same partial unique index createLabel checks) — never a restore
+  // candidate here, since only createLabel offers that flow (C-32).
+  | { kind: 'name-taken' };
+
+// Rename / recolor / recategorize. Renaming to a name that only matches a
+// soft-deleted label is allowed at the DB level (the unique index only
+// covers active labels) and is not intercepted here — that ambiguity is
+// createLabel's job, not this one's.
+export async function updateLabel(
+  userId: string,
+  id: string,
+  patch: { name?: string; color?: string; categoryId?: string | null },
+): Promise<UpdateLabelResult> {
+  const dbPatch: { name?: string; color?: string; category_id?: string | null } = {};
+  if (patch.name !== undefined) dbPatch.name = patch.name.trim();
+  if (patch.color !== undefined) dbPatch.color = patch.color;
+  if (patch.categoryId !== undefined) dbPatch.category_id = patch.categoryId;
+
+  const { data, error } = await supabase
+    .from('labels')
+    .update(dbPatch)
+    .eq('id', id)
+    .eq('user_id', userId)
+    .select();
+  if (error) {
+    if (error.code === '23505') return { kind: 'name-taken' };
+    throw Object.assign(error, { kind: classifyError(error) });
+  }
+  if (!data || data.length === 0) {
+    throw new Error('updateLabel: no matching label (wrong user or unknown id)');
+  }
+  return { kind: 'updated', label: data[0] };
+}
+
 export type RestoreLabelResult =
   | { kind: 'restored'; label: LabelRow }
   // Restoring into a live name collision forces a rename in the same dialog.

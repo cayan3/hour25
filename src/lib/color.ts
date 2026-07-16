@@ -21,3 +21,20 @@ const LUMINANCE_THRESHOLD = 0.179;
 export function contrastText(hex: string): '#0f172a' | '#f8fafc' {
   return relativeLuminance(hex) > LUMINANCE_THRESHOLD ? '#0f172a' : '#f8fafc';
 }
+
+export function contrastRatio(hexA: string, hexB: string): number {
+  const a = relativeLuminance(hexA);
+  const b = relativeLuminance(hexB);
+  const [lighter, darker] = a > b ? [a, b] : [b, a];
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+const AA_TEXT_CONTRAST = 4.5;
+
+// Drives the non-blocking warning on the custom-hex "advanced" disclosure
+// (DESIGN.md §6) — checks the ratio against contrastText's own pick, so a
+// custom color that can't clear AA with either near-black or near-white text
+// gets flagged.
+export function isLowContrast(hex: string): boolean {
+  return contrastRatio(hex, contrastText(hex)) < AA_TEXT_CONTRAST;
+}

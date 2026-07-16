@@ -65,6 +65,8 @@ class FakeQuery implements PromiseLike<RunResult> {
     let matched = this.table.rows.filter((row) => this.filters.every((f) => f(row)));
 
     if (this.op === 'update') {
+      const collisionError = this.checkUpdateNameCollision(matched);
+      if (collisionError) return collisionError;
       matched.forEach((row) => Object.assign(row, this.payload));
     } else if (this.op === 'delete') {
       this.table.rows = this.table.rows.filter((row) => !matched.includes(row));
@@ -81,6 +83,26 @@ class FakeQuery implements PromiseLike<RunResult> {
     }
 
     return this.finish(matched);
+  }
+
+  // Mirrors the partial unique index (user_id, lower(name)) where deleted_at
+  // is null: renaming a row into a name already held by another active row
+  // for the same user must 23505, same as insert would.
+  private checkUpdateNameCollision(matched: FakeRow[]): RunResult | null {
+    if (typeof this.payload?.name !== 'string') return null;
+    const newName = (this.payload.name as string).toLowerCase();
+    const collision = this.table.rows.find(
+      (row) =>
+        !matched.includes(row) &&
+        row.deleted_at === null &&
+        typeof row.name === 'string' &&
+        row.name.toLowerCase() === newName &&
+        matched.some((m) => m.user_id === row.user_id),
+    );
+    if (collision) {
+      return { data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint' } };
+    }
+    return null;
   }
 
   private runInsert(): RunResult {

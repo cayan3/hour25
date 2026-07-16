@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { contrastText } from '../../src/lib/color';
+import { contrastText, contrastRatio, isLowContrast } from '../../src/lib/color';
 
 describe('contrastText', () => {
   it('returns near-white text on a black background', () => {
@@ -25,5 +25,29 @@ describe('contrastText', () => {
 
   it('supports hex without a leading #', () => {
     expect(contrastText('ffffff')).toBe('#0f172a');
+  });
+});
+
+describe('contrastRatio', () => {
+  it('is 21:1 for black against white', () => {
+    expect(contrastRatio('#000000', '#ffffff')).toBeCloseTo(21, 0);
+  });
+
+  it('is 1:1 for identical colors', () => {
+    expect(contrastRatio('#4287f5', '#4287f5')).toBeCloseTo(1, 5);
+  });
+
+  it('is symmetric', () => {
+    expect(contrastRatio('#123456', '#abcdef')).toBeCloseTo(contrastRatio('#abcdef', '#123456'), 5);
+  });
+});
+
+describe('isLowContrast', () => {
+  it('flags a mid-gray custom color that cannot clear AA with either text color', () => {
+    expect(isLowContrast('#787878')).toBe(true);
+  });
+
+  it('does not flag a saturated color that clears AA', () => {
+    expect(isLowContrast('#0072b2')).toBe(false);
   });
 });

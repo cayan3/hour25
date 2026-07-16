@@ -9,7 +9,7 @@ vi.mock('../../../src/lib/supabase', () => ({
   },
 }));
 
-import { createLabel, softDeleteLabel, restoreLabel } from '../../../src/lib/db/labels';
+import { createLabel, softDeleteLabel, restoreLabel, updateLabel } from '../../../src/lib/db/labels';
 
 const USER = 'user-1';
 
@@ -110,5 +110,27 @@ describe('restoreLabel — rename-on-collision', () => {
       kind: 'restored',
       label: expect.objectContaining({ id: 'label-deleted-2', name: 'Work (old)', deleted_at: null }),
     });
+  });
+});
+
+describe('updateLabel — rename/recolor', () => {
+  it('recolors a label without touching its name', async () => {
+    const result = await updateLabel(USER, 'label-active', { color: '#abcdef' });
+    expect(result).toEqual({ kind: 'updated', label: expect.objectContaining({ id: 'label-active', name: 'Work', color: '#abcdef' }) });
+  });
+
+  it('renames a label to a free name', async () => {
+    const result = await updateLabel(USER, 'label-active', { name: 'Deep work' });
+    expect(result).toEqual({ kind: 'updated', label: expect.objectContaining({ name: 'Deep work' }) });
+  });
+
+  it('reports name-taken when renaming to another active label\'s name', async () => {
+    labelsTable.rows.push({ id: 'label-active-2', user_id: USER, category_id: null, name: 'Reading', color: '#777777', deleted_at: null, created_at: null });
+    const result = await updateLabel(USER, 'label-active-2', { name: 'Work' });
+    expect(result).toEqual({ kind: 'name-taken' });
+  });
+
+  it('throws for an unknown id', async () => {
+    await expect(updateLabel(USER, 'does-not-exist', { color: '#000000' })).rejects.toThrow(/no matching label/);
   });
 });

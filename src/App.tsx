@@ -1,13 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import type { Session } from '@supabase/supabase-js';
 import { getCurrentSession, onAuthStateChange, signOut } from './lib/db/auth';
-import { ensureUserSettings, getSettings } from './lib/db/settings';
+import { ensureUserSettings } from './lib/db/settings';
+import { useSettings } from './hooks/useSettings';
 import { configureSupabaseFlush } from './lib/offline/supabaseFlush';
 import { initOfflineSync } from './lib/offline/sync';
 import { queryClient } from './lib/queryClient';
 import { SignInView } from './components/SignInView';
 import { ThemeToggle } from './components/ThemeToggle';
+import { TodayPlaceholder } from './components/TodayPlaceholder';
+import { SettingsView } from './components/settings/SettingsView';
+import { OnboardingWizard } from './components/onboarding/OnboardingWizard';
 
 type AuthState =
   | { status: 'loading' }
@@ -83,16 +86,52 @@ export default function App() {
 }
 
 function AuthenticatedShell({ userId, email }: { userId: string; email: string | null }) {
-  const { data: settings } = useQuery({
-    queryKey: ['settings', userId],
-    queryFn: () => getSettings(userId),
-  });
+  const { data: settings } = useSettings(userId);
+  const [view, setView] = useState<'today' | 'settings'>('today');
+
+  if (!settings) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 dark:bg-slate-900">
+        <p className="text-slate-500 dark:text-slate-400">Loading…</p>
+      </div>
+    );
+  }
+
+  // §12/C-38: onboarding shows iff onboarded_at is null; stamped on finish or
+  // skip so it never re-triggers.
+  if (settings.onboarded_at === null) {
+    return (
+      <OnboardingWizard
+        userId={userId}
+        initialSleepStart={settings.sleep_start}
+        initialSleepEnd={settings.sleep_end}
+        onDone={() => setView('today')}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-900 dark:text-slate-50">
-      <header className="flex items-center justify-between p-4">
-        <span className="text-sm text-slate-500 dark:text-slate-400">{email}</span>
+      <header className="flex items-center justify-between border-b border-slate-200 p-4 dark:border-slate-800">
+        <nav className="flex gap-1">
+          {(['today', 'settings'] as const).map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => setView(tab)}
+              aria-current={view === tab ? 'page' : undefined}
+              className={`rounded px-3 py-1.5 text-sm capitalize focus-visible:ring-2 focus-visible:ring-offset-2 ${
+                view === tab
+                  ? 'bg-slate-200 text-slate-900 dark:bg-slate-700 dark:text-slate-50'
+                  : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+              }`}
+            >
+              {tab}
+            </button>
+          ))}
+        </nav>
         <div className="flex items-center gap-2">
+          <span className="text-sm text-slate-500 dark:text-slate-400">{email}</span>
           <ThemeToggle />
           <button
             type="button"
@@ -103,7 +142,7 @@ function AuthenticatedShell({ userId, email }: { userId: string; email: string |
           </button>
         </div>
       </header>
-      <p className="p-4">Time Tracker — Phase 1 scaffold. Timezone: {settings?.timezone ?? '…'}</p>
+      {view === 'today' ? <TodayPlaceholder userId={userId} /> : <SettingsView userId={userId} />}
     </div>
   );
 }
