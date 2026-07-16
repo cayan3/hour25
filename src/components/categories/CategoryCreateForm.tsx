@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { categoryFormSchema } from '../../lib/schemas';
-import { nextPaletteColor } from '../../lib/palette';
+import { LABEL_PALETTE } from '../../lib/palette';
 import { PaletteColorPicker } from '../labels/PaletteColorPicker';
 import { useCreateCategory } from '../../hooks/useCategories';
 import { toFriendlyErrorMessage } from '../../lib/errorMessage';
@@ -12,7 +12,7 @@ interface CategoryCreateFormProps {
 
 export function CategoryCreateForm({ userId, onCreated }: CategoryCreateFormProps) {
   const [name, setName] = useState('');
-  const [color, setColor] = useState(() => nextPaletteColor());
+  const [color, setColor] = useState<string>(LABEL_PALETTE[0].hex);
   const [error, setError] = useState<string | null>(null);
   const createCategory = useCreateCategory(userId);
 
@@ -30,8 +30,9 @@ export function CategoryCreateForm({ userId, onCreated }: CategoryCreateFormProp
         return;
       }
       setError(null);
+      // Deliberately leaves color as-is (see LabelCreateForm) — not reset
+      // to a new swatch, so the picker doesn't appear to jump on its own.
       setName('');
-      setColor(nextPaletteColor());
       onCreated?.();
     } catch (e) {
       setError(toFriendlyErrorMessage(e));

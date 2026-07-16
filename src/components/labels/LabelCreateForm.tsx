@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { labelFormSchema } from '../../lib/schemas';
-import { nextPaletteColor } from '../../lib/palette';
+import { LABEL_PALETTE } from '../../lib/palette';
 import { PaletteColorPicker } from './PaletteColorPicker';
 import { RestoreOrCreateDialog } from './RestoreOrCreateDialog';
 import { useLabelCreateFlow } from '../../hooks/useLabelCreateFlow';
@@ -21,16 +21,19 @@ interface LabelCreateFormProps {
 
 export function LabelCreateForm({ userId, categories, onCreated, color: controlledColor, onColorChange }: LabelCreateFormProps) {
   const [name, setName] = useState('');
-  const [internalColor, setInternalColor] = useState(() => nextPaletteColor());
+  const [internalColor, setInternalColor] = useState<string>(LABEL_PALETTE[0].hex);
   const color = controlledColor ?? internalColor;
   const setColor = onColorChange ?? setInternalColor;
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [fieldError, setFieldError] = useState<string | null>(null);
   const flow = useLabelCreateFlow(userId);
 
+  // Deliberately does not reset color after a successful create — jumping
+  // to a new swatch on its own felt random to the user testing it, and
+  // leaving the picker where they left it is more predictable even though
+  // it means picking a new color for the next label is on them.
   function reset() {
     setName('');
-    setColor(nextPaletteColor());
     setCategoryId(null);
   }
 

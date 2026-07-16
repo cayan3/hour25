@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useActiveLabels } from '../../hooks/useLabels';
 import { useLabelCreateFlow } from '../../hooks/useLabelCreateFlow';
-import { nextPaletteColor } from '../../lib/palette';
+import { LABEL_PALETTE } from '../../lib/palette';
 import { LabelCreateForm } from '../labels/LabelCreateForm';
 import { CreatedLabelsList } from './CreatedLabelsList';
 import { RestoreOrCreateDialog } from '../labels/RestoreOrCreateDialog';
@@ -21,16 +21,16 @@ export function StepCreateLabels({ userId, onContinue }: StepCreateLabelsProps) 
   const flow = useLabelCreateFlow(userId);
   // Shared with LabelCreateForm below: whichever swatch is currently
   // highlighted there is what a chip tap uses too, not an independent cycle
-  // invisible to the form. Advances to the next palette color after any
-  // creation (chip or form submit) so several quick chip taps still land on
-  // visually distinct colors without the user having to re-pick each time.
-  const [color, setColor] = useState(() => nextPaletteColor());
+  // invisible to the form. Deliberately does not advance after a creation —
+  // jumping to a new color on its own read as random to the user testing
+  // it; leaving the picker where it was is more predictable, even though it
+  // means picking a new color for the next label is on them.
+  const [color, setColor] = useState<string>(LABEL_PALETTE[0].hex);
 
   const existingNames = new Set((activeLabels.data ?? []).map((l) => l.name.trim().toLowerCase()));
 
   async function tapSuggestion(name: string) {
-    const result = await flow.create(name, color);
-    if (result.ok) setColor(nextPaletteColor());
+    await flow.create(name, color);
   }
 
   return (
