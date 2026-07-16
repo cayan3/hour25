@@ -5,6 +5,7 @@ import { getCurrentSession, onAuthStateChange, signOut } from './lib/db/auth';
 import { ensureUserSettings, getSettings } from './lib/db/settings';
 import { configureSupabaseFlush } from './lib/offline/supabaseFlush';
 import { initOfflineSync } from './lib/offline/sync';
+import { queryClient } from './lib/queryClient';
 import { SignInView } from './components/SignInView';
 import { ThemeToggle } from './components/ThemeToggle';
 
@@ -23,9 +24,11 @@ function toAuthState(session: Session | null): AuthState {
 // writing the browser-detected timezone (C-48). Safe to call on every
 // sign-in — a returning user's row is left untouched.
 function bootstrapUserSettings(userId: string): void {
-  ensureUserSettings(userId, Intl.DateTimeFormat().resolvedOptions().timeZone).catch((e) => {
-    console.error('ensureUserSettings failed', e);
-  });
+  ensureUserSettings(userId, Intl.DateTimeFormat().resolvedOptions().timeZone)
+    .then(() => queryClient.invalidateQueries({ queryKey: ['settings', userId] }))
+    .catch((e) => {
+      console.error('ensureUserSettings failed', e);
+    });
   if (window.location.pathname === '/auth/callback') {
     window.history.replaceState({}, '', '/');
   }
