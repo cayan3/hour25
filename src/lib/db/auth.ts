@@ -1,6 +1,10 @@
 import { supabase } from '../supabase';
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 
+// Components never import @supabase/supabase-js directly (CLAUDE.md) — the
+// session type they need is re-exported from here instead.
+export type { Session };
+
 // §12: Google OAuth via Supabase Auth. supabase-js persists the session in
 // localStorage and refreshes tokens automatically while the app runs.
 export async function signInWithGoogle(): Promise<void> {

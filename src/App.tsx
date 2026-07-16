@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Session } from '@supabase/supabase-js';
-import { getCurrentSession, onAuthStateChange, signOut } from './lib/db/auth';
+import { getCurrentSession, onAuthStateChange, signOut, type Session } from './lib/db/auth';
 import { ensureUserSettings } from './lib/db/settings';
 import { useSettings } from './hooks/useSettings';
 import { configureSupabaseFlush } from './lib/offline/supabaseFlush';
