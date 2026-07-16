@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { LabelRow } from '../../lib/db/labels';
+import { nameSchema } from '../../lib/schemas';
 
 interface RestoreOutcome {
   kind: 'restored' | 'active-name-collision';
@@ -29,6 +30,14 @@ export function RestoreOrCreateDialog({
   const [createError, setCreateError] = useState<string | null>(null);
 
   async function handleRestore(renameTo?: string) {
+    if (renameTo !== undefined) {
+      const parsed = nameSchema.safeParse(renameTo);
+      if (!parsed.success) {
+        setRenameError(parsed.error.issues[0]?.message ?? 'Invalid name');
+        return;
+      }
+      renameTo = parsed.data;
+    }
     const result = await onRestore(renameTo);
     if (result?.kind === 'active-name-collision') {
       setMode('rename-restore');
@@ -37,12 +46,17 @@ export function RestoreOrCreateDialog({
   }
 
   async function handleCreateDistinct(newName: string) {
-    if (newName.trim().toLowerCase() === deletedLabel.name.trim().toLowerCase()) {
+    const parsed = nameSchema.safeParse(newName);
+    if (!parsed.success) {
+      setCreateError(parsed.error.issues[0]?.message ?? 'Invalid name');
+      return;
+    }
+    if (parsed.data.toLowerCase() === deletedLabel.name.trim().toLowerCase()) {
       setCreateError(`Enter a name different from "${deletedLabel.name}".`);
       return;
     }
-    const ok = await onCreateDistinct(newName);
-    if (!ok) setCreateError(`"${newName}" is already an active label.`);
+    const ok = await onCreateDistinct(parsed.data);
+    if (!ok) setCreateError(`"${parsed.data}" is already an active label.`);
   }
 
   return (

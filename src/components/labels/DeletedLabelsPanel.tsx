@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { LabelRow } from '../../lib/db/labels';
 import { useRestoreLabel } from '../../hooks/useLabels';
+import { nameSchema } from '../../lib/schemas';
 
 interface DeletedLabelsPanelProps {
   userId: string;
@@ -29,8 +30,18 @@ function DeletedLabelRow({ userId, label }: { userId: string; label: LabelRow })
   const restoreLabel = useRestoreLabel(userId);
   const [renamePrompt, setRenamePrompt] = useState<{ conflictName: string } | null>(null);
   const [renameValue, setRenameValue] = useState(label.name);
+  const [renameError, setRenameError] = useState<string | null>(null);
 
   async function handleRestore(renameTo?: string) {
+    if (renameTo !== undefined) {
+      const parsed = nameSchema.safeParse(renameTo);
+      if (!parsed.success) {
+        setRenameError(parsed.error.issues[0]?.message ?? 'Invalid name');
+        return;
+      }
+      renameTo = parsed.data;
+    }
+    setRenameError(null);
     const result = await restoreLabel.mutateAsync({ id: label.id, renameTo });
     if (result.kind === 'active-name-collision') {
       setRenamePrompt({ conflictName: result.conflictingLabel.name });
@@ -73,6 +84,7 @@ function DeletedLabelRow({ userId, label }: { userId: string; label: LabelRow })
           <p className="text-sm text-red-600 dark:text-red-400">
             "{renamePrompt.conflictName}" is already active — restore under a different name.
           </p>
+          {renameError && <p className="text-sm text-red-600 dark:text-red-400">{renameError}</p>}
           <input
             value={renameValue}
             onChange={(e) => setRenameValue(e.target.value)}

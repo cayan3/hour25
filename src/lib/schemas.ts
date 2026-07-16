@@ -10,17 +10,21 @@ const hexColor = z
   .trim()
   .regex(/^#[0-9a-fA-F]{6}$/, 'Enter a 6-digit hex color, e.g. #4287f5');
 
-const name = z.string().trim().min(1, 'Name is required').max(60, 'Keep it under 60 characters');
+// Exported standalone so any call site that only collects a name (label
+// rename, restore-with-rename) validates against the same rule instead of
+// reimplementing it — a bare `create`/`restore` db call has no length check
+// of its own and will happily insert a blank name otherwise.
+export const nameSchema = z.string().trim().min(1, 'Name is required').max(60, 'Keep it under 60 characters');
 
 export const labelFormSchema = z.object({
-  name,
+  name: nameSchema,
   color: hexColor,
   categoryId: z.string().nullable().optional(),
 });
 export type LabelFormValues = z.infer<typeof labelFormSchema>;
 
 export const categoryFormSchema = z.object({
-  name,
+  name: nameSchema,
   color: hexColor,
 });
 export type CategoryFormValues = z.infer<typeof categoryFormSchema>;
