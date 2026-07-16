@@ -1,0 +1,167 @@
+// A minimal in-memory stand-in for the slice of the supabase-js query
+// builder that src/lib/db/*.ts actually uses (select/insert/update/delete,
+// eq/is filters, order, single/maybeSingle, and being awaitable). Just
+// enough to unit test the db helpers' branching without a live project.
+
+export type FakeRow = Record<string, unknown>;
+
+interface RunResult {
+  data: FakeRow | FakeRow[] | null;
+  error: { code: string; message: string } | null;
+}
+
+type Filter = (row: FakeRow) => boolean;
+
+class FakeQuery implements PromiseLike<RunResult> {
+  private filters: Filter[] = [];
+  private orderCol: string | null = null;
+  private orderAsc = true;
+  private wantSingle = false;
+  private wantMaybeSingle = false;
+
+  constructor(
+    private readonly table: FakeTable,
+    private readonly op: 'select' | 'insert' | 'update' | 'delete',
+    private readonly payload?: FakeRow,
+  ) {}
+
+  select(): this {
+    return this;
+  }
+
+  eq(col: string, val: unknown): this {
+    this.filters.push((row) => row[col] === val);
+    return this;
+  }
+
+  is(col: string, val: unknown): this {
+    this.filters.push((row) => row[col] === val);
+    return this;
+  }
+
+  order(col: string, opts?: { ascending?: boolean }): this {
+    this.orderCol = col;
+    this.orderAsc = opts?.ascending ?? true;
+    return this;
+  }
+
+  limit(): this {
+    return this;
+  }
+
+  single(): this {
+    this.wantSingle = true;
+    return this;
+  }
+
+  maybeSingle(): this {
+    this.wantMaybeSingle = true;
+    return this;
+  }
+
+  private run(): RunResult {
+    if (this.op === 'insert') return this.runInsert();
+
+    let matched = this.table.rows.filter((row) => this.filters.every((f) => f(row)));
+
+    if (this.op === 'update') {
+      matched.forEach((row) => Object.assign(row, this.payload));
+    } else if (this.op === 'delete') {
+      this.table.rows = this.table.rows.filter((row) => !matched.includes(row));
+    }
+
+    if (this.orderCol) {
+      const col = this.orderCol;
+      matched = [...matched].sort((a, b) => {
+        const av = String(a[col]);
+        const bv = String(b[col]);
+        if (av === bv) return 0;
+        return (av < bv ? -1 : 1) * (this.orderAsc ? 1 : -1);
+      });
+    }
+
+    return this.finish(matched);
+  }
+
+  private runInsert(): RunResult {
+    const payload = this.payload ?? {};
+    const collision = this.table.rows.find(
+      (row) =>
+        row.deleted_at === null &&
+        row.user_id === payload.user_id &&
+        typeof row.name === 'string' &&
+        typeof payload.name === 'string' &&
+        row.name.toLowerCase() === (payload.name as string).toLowerCase(),
+    );
+    if (collision) {
+      return { data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint' } };
+    }
+    const newRow: FakeRow = {
+      id: `id-${this.table.nextId()}`,
+      created_at: null,
+      deleted_at: null,
+      category_id: null,
+      ...payload,
+    };
+    this.table.rows.push(newRow);
+    return this.finish([newRow]);
+  }
+
+  private finish(matched: FakeRow[]): RunResult {
+    if (this.wantSingle) {
+      if (matched.length !== 1) return { data: null, error: { code: 'PGRST116', message: 'no rows returned' } };
+      return { data: matched[0], error: null };
+    }
+    if (this.wantMaybeSingle) {
+      return { data: matched[0] ?? null, error: null };
+    }
+    return { data: matched, error: null };
+  }
+
+  then<TResult1 = RunResult, TResult2 = never>(
+    onfulfilled?: ((value: RunResult) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+  ): PromiseLike<TResult1 | TResult2> {
+    return Promise.resolve(this.run()).then(onfulfilled, onrejected);
+  }
+}
+
+export class FakeTable {
+  rows: FakeRow[];
+  private idCounter = 0;
+
+  constructor(seed: FakeRow[] = []) {
+    this.rows = seed.map((row) => ({ ...row }));
+  }
+
+  nextId(): number {
+    this.idCounter += 1;
+    return this.idCounter;
+  }
+
+  select(): FakeQuery {
+    return new FakeQuery(this, 'select');
+  }
+
+  insert(payload: FakeRow): FakeQuery {
+    return new FakeQuery(this, 'insert', payload);
+  }
+
+  update(payload: FakeRow): FakeQuery {
+    return new FakeQuery(this, 'update', payload);
+  }
+
+  delete(): FakeQuery {
+    return new FakeQuery(this, 'delete');
+  }
+}
+
+export function fakeSupabaseClient(tables: Record<string, FakeTable>): { from(table: string): FakeTable } {
+  return {
+    from(table: string): FakeTable {
+      const t = tables[table];
+      if (!t) throw new Error(`fakeSupabaseClient: unmocked table "${table}"`);
+      return t;
+    },
+  };
+}
