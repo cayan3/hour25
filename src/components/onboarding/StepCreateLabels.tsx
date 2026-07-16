@@ -1,8 +1,9 @@
+import { useState } from 'react';
 import { useActiveLabels } from '../../hooks/useLabels';
 import { useLabelCreateFlow } from '../../hooks/useLabelCreateFlow';
 import { nextPaletteColor } from '../../lib/palette';
 import { LabelCreateForm } from '../labels/LabelCreateForm';
-import { LabelList } from '../labels/LabelList';
+import { CreatedLabelsList } from './CreatedLabelsList';
 import { RestoreOrCreateDialog } from '../labels/RestoreOrCreateDialog';
 
 // The ONLY hardcoded label-name strings permitted anywhere in the codebase
@@ -18,8 +19,19 @@ interface StepCreateLabelsProps {
 export function StepCreateLabels({ userId, onContinue }: StepCreateLabelsProps) {
   const activeLabels = useActiveLabels(userId);
   const flow = useLabelCreateFlow(userId);
+  // Shared with LabelCreateForm below: whichever swatch is currently
+  // highlighted there is what a chip tap uses too, not an independent cycle
+  // invisible to the form. Advances to the next palette color after any
+  // creation (chip or form submit) so several quick chip taps still land on
+  // visually distinct colors without the user having to re-pick each time.
+  const [color, setColor] = useState(() => nextPaletteColor());
 
   const existingNames = new Set((activeLabels.data ?? []).map((l) => l.name.trim().toLowerCase()));
+
+  async function tapSuggestion(name: string) {
+    const result = await flow.create(name, color);
+    if (result.ok) setColor(nextPaletteColor());
+  }
 
   return (
     <div className="space-y-6">
@@ -30,7 +42,7 @@ export function StepCreateLabels({ userId, onContinue }: StepCreateLabelsProps) 
         </p>
       </div>
 
-      <LabelList userId={userId} labels={activeLabels.data ?? []} categories={[]} />
+      <CreatedLabelsList labels={activeLabels.data ?? []} />
 
       <div>
         <p className="mb-2 text-sm text-slate-600 dark:text-slate-300">Quick add:</p>
@@ -42,7 +54,7 @@ export function StepCreateLabels({ userId, onContinue }: StepCreateLabelsProps) 
                 key={name}
                 type="button"
                 disabled={already || flow.isPending}
-                onClick={() => flow.create(name, nextPaletteColor())}
+                onClick={() => tapSuggestion(name)}
                 className="touch-manipulation rounded-full border border-slate-300 px-3 py-1.5 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-default disabled:opacity-40 dark:border-slate-600"
               >
                 {already ? `${name} ✓` : name}
@@ -53,7 +65,7 @@ export function StepCreateLabels({ userId, onContinue }: StepCreateLabelsProps) 
         {flow.error && <p className="mt-2 text-sm text-red-600 dark:text-red-400">{flow.error}</p>}
       </div>
 
-      <LabelCreateForm userId={userId} />
+      <LabelCreateForm userId={userId} color={color} onColorChange={setColor} />
 
       {flow.collision && (
         <RestoreOrCreateDialog

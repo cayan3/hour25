@@ -10,11 +10,20 @@ interface LabelCreateFormProps {
   userId: string;
   categories?: CategoryRow[];
   onCreated?: () => void;
+  // Controlled color, optional — lets a caller (StepCreateLabels) share the
+  // "currently selected" swatch with something else it renders (the
+  // suggestion chips), so tapping a chip uses whatever's highlighted here
+  // rather than an independent, invisible cycle. Uncontrolled (the Settings
+  // usage) when omitted.
+  color?: string;
+  onColorChange?: (hex: string) => void;
 }
 
-export function LabelCreateForm({ userId, categories, onCreated }: LabelCreateFormProps) {
+export function LabelCreateForm({ userId, categories, onCreated, color: controlledColor, onColorChange }: LabelCreateFormProps) {
   const [name, setName] = useState('');
-  const [color, setColor] = useState(() => nextPaletteColor());
+  const [internalColor, setInternalColor] = useState(() => nextPaletteColor());
+  const color = controlledColor ?? internalColor;
+  const setColor = onColorChange ?? setInternalColor;
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [fieldError, setFieldError] = useState<string | null>(null);
   const flow = useLabelCreateFlow(userId);
