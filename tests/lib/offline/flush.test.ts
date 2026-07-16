@@ -130,7 +130,7 @@ describe('flushOnce — C-29 attempts policy', () => {
     expect(await offlineDB.writes.get([USER, '2026-07-15', 7])).toBeUndefined(); // flushed successfully
   });
 
-  it('bumps attempts only for a row that fails again during isolation, and caps at MAX_FLUSH_ATTEMPTS', async () => {
+  it('bumps only the failing row and stops isolation on a network failure, leaving later rows untouched', async () => {
     const sendUpsertBatch = vi.fn(async (_userId: string, rows: { slotIndex: number }[]) => {
       // First call is the 2-row batch -> force isolation.
       // Isolated single-row call for slot 6 always fails as a network blip.
@@ -146,11 +146,19 @@ describe('flushOnce — C-29 attempts policy', () => {
     await offlineDB.writes.put(seedRow({ slotIndex: 6, labelId: 'flaky-label', rev: 'rev-6' }));
     await offlineDB.writes.put(seedRow({ slotIndex: 7, labelId: 'good-label', rev: 'rev-7' }));
 
-    await flushOnce(USER);
+    const result = await flushOnce(USER);
 
+    // The network classification stops the isolation pass and the whole flush
+    // (SPEC §6 step 6): slot 6 gets its one attempts bump, slot 7 is never
+    // sent and never bumped — a connectivity drop mid-isolation must not burn
+    // attempts across the rest of the batch.
+    expect(result).toBe('network');
     const row = await offlineDB.writes.get([USER, '2026-07-15', 6]);
     expect(row).toBeDefined();
     expect(row?.attempts).toBe(1);
+    const laterRow = await offlineDB.writes.get([USER, '2026-07-15', 7]);
+    expect(laterRow).toBeDefined();
+    expect(laterRow?.attempts).toBe(0);
     expect(await offlineDB.dead.toArray()).toHaveLength(0);
   });
 
@@ -172,12 +180,16 @@ describe('flushOnce — C-29 attempts policy', () => {
     );
     await offlineDB.writes.put(seedRow({ slotIndex: 7, labelId: 'good-label', rev: 'rev-7' }));
 
-    await flushOnce(USER);
+    const result = await flushOnce(USER);
 
     expect(await offlineDB.writes.get([USER, '2026-07-15', 6])).toBeUndefined();
     const deadRows = await offlineDB.dead.toArray();
     expect(deadRows).toHaveLength(1);
     expect(deadRows[0].slotIndex).toBe(6);
     expect(deadRows[0].attempts).toBe(MAX_FLUSH_ATTEMPTS);
+    // The failure that pushed slot 6 over the cap was a network classification,
+    // so the flush still stops there — slot 7 stays queued for the next round.
+    expect(result).toBe('network');
+    expect(await offlineDB.writes.get([USER, '2026-07-15', 7])).toBeDefined();
   });
 });

@@ -85,7 +85,17 @@ function groupByDate(rows: QueuedWrite[]): Map<string, QueuedWrite[]> {
   return m;
 }
 
-async function isolateBatch(userId: string, batch: QueuedWrite[], d: FlushDeps): Promise<void> {
+// Returns 'ok' when the whole batch was isolated, or the classification that
+// stopped it. A single-row network/auth failure bumps that row's attempts —
+// the only guard against a row that fails retriably forever — and then stops
+// the isolation pass and the whole flush, same as a batch-level failure
+// (SPEC §6 step 6). Later rows keep their queue positions untouched, so a
+// connectivity drop mid-isolation never burns attempts across the batch.
+async function isolateBatch(
+  userId: string,
+  batch: QueuedWrite[],
+  d: FlushDeps,
+): Promise<'ok' | 'network' | 'auth'> {
   for (const row of batch) {
     try {
       if (row.op === 'upsert') {
@@ -98,11 +108,13 @@ async function isolateBatch(userId: string, batch: QueuedWrite[], d: FlushDeps):
       const kind = classifyError(e);
       if (kind === 'permanent') {
         await deadLetter(row, 'permanent write failure');
-      } else {
-        await bumpAttempts(row, `${kind} failure during isolation`);
+        continue;
       }
+      await bumpAttempts(row, `${kind} failure during isolation`);
+      return kind;
     }
   }
+  return 'ok';
 }
 
 async function sendBatch(userId: string, batch: QueuedWrite[], d: FlushDeps): Promise<'ok' | 'network' | 'auth'> {
@@ -120,11 +132,16 @@ async function sendBatch(userId: string, batch: QueuedWrite[], d: FlushDeps): Pr
   } catch (e) {
     const kind = classifyError(e);
     if (kind === 'network' || kind === 'auth') return kind; // stop the loop, bump nothing (C-29)
-    await isolateBatch(userId, batch, d); // batch classified permanent
-    return 'ok';
+    return isolateBatch(userId, batch, d); // batch classified permanent
   }
 }
 
+// TODO (day-view/sync-surfaces work, SPEC §6 step 7): on the queue-empty
+// transition after a successful flush, invalidate the ['entries'] query-key
+// prefix so the UI swaps from overlay truth to confirmed server truth; and
+// publish flush state ('idle' | 'flushing' | 'offline' | 'auth') plus the
+// dead-letter count to a queueStatus store for the pending chip and banners.
+// Deliberately not built yet — nothing writes entries until the day view ships.
 export async function flushOnce(userId: string): Promise<FlushResult> {
   const d = requireDeps();
   const session = await d.getSession();
