@@ -4,6 +4,7 @@ import type { CategoryRow } from '../../lib/db/categories';
 import { useSoftDeleteLabel, useUpdateLabel } from '../../hooks/useLabels';
 import { PaletteColorPicker } from './PaletteColorPicker';
 import { labelFormSchema } from '../../lib/schemas';
+import { toFriendlyErrorMessage } from '../../lib/errorMessage';
 
 interface LabelListProps {
   userId: string;
@@ -39,6 +40,7 @@ function LabelRowItem({
   const [color, setColor] = useState(label.color);
   const [categoryId, setCategoryId] = useState<string | null>(label.category_id);
   const [error, setError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const updateLabel = useUpdateLabel(userId);
   const softDeleteLabel = useSoftDeleteLabel(userId);
 
@@ -48,16 +50,33 @@ function LabelRowItem({
       setError(parsed.error.issues[0]?.message ?? 'Invalid input');
       return;
     }
-    const result = await updateLabel.mutateAsync({
-      id: label.id,
-      patch: { name: parsed.data.name, color: parsed.data.color, categoryId: parsed.data.categoryId ?? null },
-    });
-    if (result.kind === 'name-taken') {
-      setError(`"${parsed.data.name}" is already an active label.`);
-      return;
+    try {
+      const result = await updateLabel.mutateAsync({
+        id: label.id,
+        patch: { name: parsed.data.name, color: parsed.data.color, categoryId: parsed.data.categoryId ?? null },
+      });
+      if (result.kind === 'name-taken') {
+        setError(`"${parsed.data.name}" is already an active label.`);
+        return;
+      }
+      setError(null);
+      setEditing(false);
+    } catch (e) {
+      setError(toFriendlyErrorMessage(e));
     }
-    setError(null);
-    setEditing(false);
+  }
+
+  async function confirmDelete() {
+    try {
+      await softDeleteLabel.mutateAsync(label.id);
+      setDeleteError(null);
+      setConfirmingDelete(false);
+    } catch (e) {
+      // Leave the confirm row open with the error visible instead of
+      // silently closing it — a stale-cached label whose row no longer
+      // exists server-side used to fail here with zero feedback.
+      setDeleteError(toFriendlyErrorMessage(e));
+    }
   }
 
   function cancelEdit() {
@@ -119,7 +138,8 @@ function LabelRowItem({
   }
 
   return (
-    <li className="flex items-center justify-between rounded border border-slate-200 p-3 dark:border-slate-700">
+    <li className="rounded border border-slate-200 p-3 dark:border-slate-700">
+      <div className="flex items-center justify-between">
       <div className="flex items-center gap-2">
         <span aria-hidden="true" className="h-5 w-5 rounded-full" style={{ backgroundColor: label.color }} />
         <span className="text-sm text-slate-900 dark:text-slate-50">{label.name}</span>
@@ -137,17 +157,18 @@ function LabelRowItem({
             <span className="text-slate-600 dark:text-slate-300">Delete? History is kept.</span>
             <button
               type="button"
-              onClick={() => {
-                softDeleteLabel.mutate(label.id);
-                setConfirmingDelete(false);
-              }}
-              className="rounded bg-red-600 px-2 py-1 text-white focus-visible:ring-2 focus-visible:ring-offset-2"
+              onClick={confirmDelete}
+              disabled={softDeleteLabel.isPending}
+              className="rounded bg-red-600 px-2 py-1 text-white focus-visible:ring-2 focus-visible:ring-offset-2 disabled:opacity-50"
             >
               Delete
             </button>
             <button
               type="button"
-              onClick={() => setConfirmingDelete(false)}
+              onClick={() => {
+                setConfirmingDelete(false);
+                setDeleteError(null);
+              }}
               className="px-2 py-1 text-slate-500 focus-visible:ring-2 focus-visible:ring-offset-2 dark:text-slate-400"
             >
               Cancel
@@ -163,6 +184,8 @@ function LabelRowItem({
           </button>
         )}
       </div>
+      </div>
+      {deleteError && <p className="mt-2 text-sm text-red-600 dark:text-red-400">{deleteError}</p>}
     </li>
   );
 }

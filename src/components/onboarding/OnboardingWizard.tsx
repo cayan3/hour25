@@ -3,6 +3,7 @@ import { useUpdateSettings } from '../../hooks/useSettings';
 import { StepCreateLabels } from './StepCreateLabels';
 import { StepSleep } from './StepSleep';
 import { StepLandOnToday } from './StepLandOnToday';
+import { toFriendlyErrorMessage } from '../../lib/errorMessage';
 
 interface OnboardingWizardProps {
   userId: string;
@@ -15,11 +16,16 @@ interface OnboardingWizardProps {
 // onboarded_at (C-38) so the wizard never re-triggers.
 export function OnboardingWizard({ userId, initialSleepStart, initialSleepEnd, onDone }: OnboardingWizardProps) {
   const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [finishError, setFinishError] = useState<string | null>(null);
   const updateSettings = useUpdateSettings(userId);
 
   async function stampOnboarded() {
-    await updateSettings.mutateAsync({ onboarded_at: new Date().toISOString() });
-    onDone();
+    try {
+      await updateSettings.mutateAsync({ onboarded_at: new Date().toISOString() });
+      onDone();
+    } catch (e) {
+      setFinishError(toFriendlyErrorMessage(e));
+    }
   }
 
   return (
@@ -44,6 +50,7 @@ export function OnboardingWizard({ userId, initialSleepStart, initialSleepEnd, o
             </button>
           )}
         </div>
+        {finishError && <p className="mb-4 text-sm text-red-600 dark:text-red-400">{finishError}</p>}
 
         {step === 1 && <StepCreateLabels userId={userId} onContinue={() => setStep(2)} />}
         {step === 2 && (

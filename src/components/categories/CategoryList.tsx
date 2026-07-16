@@ -3,6 +3,7 @@ import type { CategoryRow } from '../../lib/db/categories';
 import { useDeleteCategory, useUpdateCategory } from '../../hooks/useCategories';
 import { PaletteColorPicker } from '../labels/PaletteColorPicker';
 import { categoryFormSchema } from '../../lib/schemas';
+import { toFriendlyErrorMessage } from '../../lib/errorMessage';
 
 interface CategoryListProps {
   userId: string;
@@ -28,6 +29,7 @@ function CategoryRowItem({ userId, category }: { userId: string; category: Categ
   const [name, setName] = useState(category.name);
   const [color, setColor] = useState(category.color);
   const [error, setError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const updateCategory = useUpdateCategory(userId);
   const deleteCategory = useDeleteCategory(userId);
 
@@ -37,13 +39,27 @@ function CategoryRowItem({ userId, category }: { userId: string; category: Categ
       setError(parsed.error.issues[0]?.message ?? 'Invalid input');
       return;
     }
-    const result = await updateCategory.mutateAsync({ id: category.id, patch: parsed.data });
-    if (result.kind === 'name-taken') {
-      setError(`"${parsed.data.name}" is already a category.`);
-      return;
+    try {
+      const result = await updateCategory.mutateAsync({ id: category.id, patch: parsed.data });
+      if (result.kind === 'name-taken') {
+        setError(`"${parsed.data.name}" is already a category.`);
+        return;
+      }
+      setError(null);
+      setEditing(false);
+    } catch (e) {
+      setError(toFriendlyErrorMessage(e));
     }
-    setError(null);
-    setEditing(false);
+  }
+
+  async function confirmDelete() {
+    try {
+      await deleteCategory.mutateAsync(category.id);
+      setDeleteError(null);
+      setConfirmingDelete(false);
+    } catch (e) {
+      setDeleteError(toFriendlyErrorMessage(e));
+    }
   }
 
   function cancelEdit() {
@@ -90,7 +106,8 @@ function CategoryRowItem({ userId, category }: { userId: string; category: Categ
   }
 
   return (
-    <li className="flex items-center justify-between rounded border border-slate-200 p-3 dark:border-slate-700">
+    <li className="rounded border border-slate-200 p-3 dark:border-slate-700">
+      <div className="flex items-center justify-between">
       <div className="flex items-center gap-2">
         <span aria-hidden="true" className="h-5 w-5 rounded-full" style={{ backgroundColor: category.color }} />
         <span className="text-sm text-slate-900 dark:text-slate-50">{category.name}</span>
@@ -108,17 +125,18 @@ function CategoryRowItem({ userId, category }: { userId: string; category: Categ
             <span className="text-slate-600 dark:text-slate-300">Delete permanently? Labels keep no category.</span>
             <button
               type="button"
-              onClick={() => {
-                deleteCategory.mutate(category.id);
-                setConfirmingDelete(false);
-              }}
-              className="rounded bg-red-600 px-2 py-1 text-white focus-visible:ring-2 focus-visible:ring-offset-2"
+              onClick={confirmDelete}
+              disabled={deleteCategory.isPending}
+              className="rounded bg-red-600 px-2 py-1 text-white focus-visible:ring-2 focus-visible:ring-offset-2 disabled:opacity-50"
             >
               Delete
             </button>
             <button
               type="button"
-              onClick={() => setConfirmingDelete(false)}
+              onClick={() => {
+                setConfirmingDelete(false);
+                setDeleteError(null);
+              }}
               className="px-2 py-1 text-slate-500 focus-visible:ring-2 focus-visible:ring-offset-2 dark:text-slate-400"
             >
               Cancel
@@ -134,6 +152,8 @@ function CategoryRowItem({ userId, category }: { userId: string; category: Categ
           </button>
         )}
       </div>
+      </div>
+      {deleteError && <p className="mt-2 text-sm text-red-600 dark:text-red-400">{deleteError}</p>}
     </li>
   );
 }

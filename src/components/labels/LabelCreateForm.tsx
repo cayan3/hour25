@@ -33,8 +33,8 @@ export function LabelCreateForm({ userId, categories, onCreated }: LabelCreateFo
       return;
     }
     setFieldError(null);
-    const ok = await flow.create(parsed.data.name, parsed.data.color, parsed.data.categoryId ?? null);
-    if (ok) {
+    const result = await flow.create(parsed.data.name, parsed.data.color, parsed.data.categoryId ?? null);
+    if (result.ok) {
       reset();
       onCreated?.();
     }
@@ -93,12 +93,12 @@ export function LabelCreateForm({ userId, categories, onCreated }: LabelCreateFo
           deletedLabel={flow.collision.deletedLabel}
           onRestore={flow.restore}
           onCreateDistinct={async (newName) => {
-            const ok = await flow.createDistinct(newName);
-            if (ok) {
+            const result = await flow.createDistinct(newName);
+            if (result.ok) {
               reset();
               onCreated?.();
             }
-            return ok;
+            return result;
           }}
           onCancel={flow.cancelCollision}
         />

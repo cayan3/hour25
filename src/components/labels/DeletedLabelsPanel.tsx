@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { LabelRow } from '../../lib/db/labels';
 import { useRestoreLabel } from '../../hooks/useLabels';
 import { nameSchema } from '../../lib/schemas';
+import { toFriendlyErrorMessage } from '../../lib/errorMessage';
 
 interface DeletedLabelsPanelProps {
   userId: string;
@@ -31,8 +32,10 @@ function DeletedLabelRow({ userId, label }: { userId: string; label: LabelRow })
   const [renamePrompt, setRenamePrompt] = useState<{ conflictName: string } | null>(null);
   const [renameValue, setRenameValue] = useState(label.name);
   const [renameError, setRenameError] = useState<string | null>(null);
+  const [restoreError, setRestoreError] = useState<string | null>(null);
 
   async function handleRestore(renameTo?: string) {
+    setRestoreError(null);
     if (renameTo !== undefined) {
       const parsed = nameSchema.safeParse(renameTo);
       if (!parsed.success) {
@@ -42,12 +45,18 @@ function DeletedLabelRow({ userId, label }: { userId: string; label: LabelRow })
       renameTo = parsed.data;
     }
     setRenameError(null);
-    const result = await restoreLabel.mutateAsync({ id: label.id, renameTo });
-    if (result.kind === 'active-name-collision') {
-      setRenamePrompt({ conflictName: result.conflictingLabel.name });
-      setRenameValue(renameTo ?? label.name);
-    } else {
-      setRenamePrompt(null);
+    try {
+      const result = await restoreLabel.mutateAsync({ id: label.id, renameTo });
+      if (result.kind === 'active-name-collision') {
+        setRenamePrompt({ conflictName: result.conflictingLabel.name });
+        setRenameValue(renameTo ?? label.name);
+      } else {
+        setRenamePrompt(null);
+      }
+    } catch (e) {
+      // e.g. this row was already restored/removed elsewhere (stale cache) —
+      // show it rather than leaving the button looking like it did nothing.
+      setRestoreError(toFriendlyErrorMessage(e));
     }
   }
 
@@ -67,12 +76,16 @@ function DeletedLabelRow({ userId, label }: { userId: string; label: LabelRow })
           <button
             type="button"
             onClick={() => handleRestore()}
-            className="rounded px-2 py-1 text-sm text-slate-900 hover:bg-slate-100 focus-visible:ring-2 focus-visible:ring-offset-2 dark:text-slate-50 dark:hover:bg-slate-700"
+            disabled={restoreLabel.isPending}
+            className="rounded px-2 py-1 text-sm text-slate-900 hover:bg-slate-100 focus-visible:ring-2 focus-visible:ring-offset-2 disabled:opacity-50 dark:text-slate-50 dark:hover:bg-slate-700"
           >
             Restore
           </button>
         )}
       </div>
+      {restoreError && !renamePrompt && (
+        <p className="mt-2 text-sm text-red-600 dark:text-red-400">{restoreError}</p>
+      )}
       {renamePrompt && (
         <form
           className="mt-2 space-y-2"

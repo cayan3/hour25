@@ -1,16 +1,12 @@
 import { useState } from 'react';
 import type { LabelRow } from '../../lib/db/labels';
 import { nameSchema } from '../../lib/schemas';
-
-interface RestoreOutcome {
-  kind: 'restored' | 'active-name-collision';
-  conflictingLabel?: LabelRow;
-}
+import type { CreateResult, RestoreOutcome } from '../../hooks/useLabelCreateFlow';
 
 interface RestoreOrCreateDialogProps {
   deletedLabel: LabelRow;
-  onRestore: (renameTo?: string) => Promise<RestoreOutcome | undefined>;
-  onCreateDistinct: (newName: string) => Promise<boolean>;
+  onRestore: (renameTo?: string) => Promise<RestoreOutcome>;
+  onCreateDistinct: (newName: string) => Promise<CreateResult>;
   onCancel: () => void;
 }
 
@@ -28,8 +24,13 @@ export function RestoreOrCreateDialog({
   const [newNameValue, setNewNameValue] = useState('');
   const [renameError, setRenameError] = useState<string | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
+  // Unexpected failures (e.g. the row this dialog is about no longer exists
+  // server-side) can surface while still in 'choice' mode, which has no
+  // per-field error slot of its own — shown at the top of the dialog instead.
+  const [dialogError, setDialogError] = useState<string | null>(null);
 
   async function handleRestore(renameTo?: string) {
+    setDialogError(null);
     if (renameTo !== undefined) {
       const parsed = nameSchema.safeParse(renameTo);
       if (!parsed.success) {
@@ -39,9 +40,12 @@ export function RestoreOrCreateDialog({
       renameTo = parsed.data;
     }
     const result = await onRestore(renameTo);
-    if (result?.kind === 'active-name-collision') {
+    if (result.kind === 'active-name-collision') {
       setMode('rename-restore');
-      setRenameError(`"${result.conflictingLabel?.name}" is already active — choose a different name.`);
+      setRenameError(`"${result.conflictingLabel.name}" is already active — choose a different name.`);
+    } else if (result.kind === 'error') {
+      if (mode === 'rename-restore') setRenameError(result.message);
+      else setDialogError(result.message);
     }
   }
 
@@ -55,8 +59,8 @@ export function RestoreOrCreateDialog({
       setCreateError(`Enter a name different from "${deletedLabel.name}".`);
       return;
     }
-    const ok = await onCreateDistinct(parsed.data);
-    if (!ok) setCreateError(`"${parsed.data}" is already an active label.`);
+    const result = await onCreateDistinct(parsed.data);
+    if (!result.ok) setCreateError(result.message ?? `"${parsed.data}" is already an active label.`);
   }
 
   return (
@@ -70,6 +74,7 @@ export function RestoreOrCreateDialog({
         <h2 id="restore-or-create-title" className="text-base font-medium text-slate-900 dark:text-slate-50">
           "{deletedLabel.name}" was deleted
         </h2>
+        {dialogError && <p className="mt-2 text-sm text-red-600 dark:text-red-400">{dialogError}</p>}
 
         {mode === 'choice' && (
           <div className="mt-3 space-y-2">

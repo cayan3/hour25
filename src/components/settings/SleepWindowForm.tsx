@@ -3,6 +3,7 @@ import { sleepWindowSchema } from '../../lib/schemas';
 import { slotIndexToLocalTime } from '../../lib/time';
 import { SLOTS_PER_DAY } from '../../lib/constants';
 import type { LabelRow } from '../../lib/db/labels';
+import { toFriendlyErrorMessage } from '../../lib/errorMessage';
 
 interface SleepWindowFormProps {
   labels: LabelRow[];
@@ -41,6 +42,8 @@ export function SleepWindowForm({
     setSaving(true);
     try {
       await onSave(parsed.data);
+    } catch (e) {
+      setError(toFriendlyErrorMessage(e));
     } finally {
       setSaving(false);
     }

@@ -3,6 +3,7 @@ import { categoryFormSchema } from '../../lib/schemas';
 import { nextPaletteColor } from '../../lib/palette';
 import { PaletteColorPicker } from '../labels/PaletteColorPicker';
 import { useCreateCategory } from '../../hooks/useCategories';
+import { toFriendlyErrorMessage } from '../../lib/errorMessage';
 
 interface CategoryCreateFormProps {
   userId: string;
@@ -22,15 +23,19 @@ export function CategoryCreateForm({ userId, onCreated }: CategoryCreateFormProp
       setError(parsed.error.issues[0]?.message ?? 'Invalid input');
       return;
     }
-    const result = await createCategory.mutateAsync(parsed.data);
-    if (result.kind === 'name-taken') {
-      setError(`"${parsed.data.name}" is already a category.`);
-      return;
+    try {
+      const result = await createCategory.mutateAsync(parsed.data);
+      if (result.kind === 'name-taken') {
+        setError(`"${parsed.data.name}" is already a category.`);
+        return;
+      }
+      setError(null);
+      setName('');
+      setColor(nextPaletteColor());
+      onCreated?.();
+    } catch (e) {
+      setError(toFriendlyErrorMessage(e));
     }
-    setError(null);
-    setName('');
-    setColor(nextPaletteColor());
-    onCreated?.();
   }
 
   return (

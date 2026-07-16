@@ -26,9 +26,24 @@ function toAuthState(session: Session | null): AuthState {
 // §12: upsert user_settings (ignoreDuplicates) on first authenticated load,
 // writing the browser-detected timezone (C-48). Safe to call on every
 // sign-in — a returning user's row is left untouched.
+//
+// Also force-invalidates labels/labels-all/categories alongside settings.
+// Without this, those three rely purely on the default 60s staleTime — fine
+// for normal multi-device drift, but it means a fresh app load can serve up
+// to a minute of stale label/category data from the persisted cache even
+// though `settings` (forced fresh here) already reflects reality. Cheap to
+// do unconditionally on every boot/sign-in; keeps all four core queries in
+// lockstep instead of settings alone jumping ahead.
 function bootstrapUserSettings(userId: string): void {
   ensureUserSettings(userId, Intl.DateTimeFormat().resolvedOptions().timeZone)
-    .then(() => queryClient.invalidateQueries({ queryKey: ['settings', userId] }))
+    .then(() =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['settings', userId] }),
+        queryClient.invalidateQueries({ queryKey: ['labels', userId] }),
+        queryClient.invalidateQueries({ queryKey: ['labels-all', userId] }),
+        queryClient.invalidateQueries({ queryKey: ['categories', userId] }),
+      ]),
+    )
     .catch((e) => {
       console.error('ensureUserSettings failed', e);
     });
