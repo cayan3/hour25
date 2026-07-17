@@ -8,11 +8,11 @@ const LABELS: Record<ThemePreference, string> = {
 
 // "Auto" + a monitor icon instead of "System" (Week 5 feedback): "System"
 // next to a "Settings" nav tab read as app settings, not the device's
-// light/dark preference. The tooltip spells out what it follows.
+// light/dark preference. Tooltip states the current mode, then the action.
 const TITLES: Record<ThemePreference, string> = {
-  system: 'Theme: Auto — follows your device’s light/dark setting. Click to change.',
-  light: 'Theme: Light. Click to change.',
-  dark: 'Theme: Dark. Click to change.',
+  system: 'Auto mode enabled (follows your device’s light/dark setting) — click for light mode.',
+  light: 'Light mode enabled — click for dark mode.',
+  dark: 'Dark mode enabled — click for auto mode.',
 };
 
 const NEXT: Record<ThemePreference, ThemePreference> = {
@@ -79,7 +79,10 @@ export function ThemeToggle() {
       className="motion-safe:transition-colors flex items-center gap-1.5 rounded px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-200 focus-visible:ring-2 focus-visible:ring-offset-2 dark:text-slate-300 dark:hover:bg-slate-800"
     >
       <Icon />
-      {LABELS[theme]}
+      {/* Icon-only on narrow screens (header width is precious on phones);
+          icon + word on desktop — keep both where space allows for
+          discoverability. */}
+      <span className="hidden sm:inline">{LABELS[theme]}</span>
     </button>
   );
 }

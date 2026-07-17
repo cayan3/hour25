@@ -153,7 +153,7 @@ function AuthenticatedShell({ userId, email }: { userId: string; email: string |
     // header wide and the right fifth of the page went white in dark mode).
     // `clip` rather than `hidden` so position:sticky descendants keep working.
     <div className="min-h-screen overflow-x-clip bg-slate-50 text-slate-900 dark:bg-slate-900 dark:text-slate-50">
-      <header className="flex items-center justify-between gap-2 border-b border-slate-200 p-4 dark:border-slate-800">
+      <header className="flex items-center justify-between gap-2 border-b border-slate-200 p-3 sm:p-4 dark:border-slate-800">
         <nav className="flex gap-1">
           {(['today', 'settings'] as const).map((tab) => (
             <button
@@ -172,7 +172,7 @@ function AuthenticatedShell({ userId, email }: { userId: string; email: string |
             </button>
           ))}
         </nav>
-        <div className="flex min-w-0 items-center gap-2">
+        <div className="flex min-w-0 items-center gap-1 sm:gap-2">
           {/* Chip left of the email (Week 5 feedback): its state changes must
               not shove the rest of the header around. */}
           <SyncChip userId={userId} />

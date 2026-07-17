@@ -5,11 +5,17 @@ import { loadLastSync } from '../../lib/lastSync';
 import { localDateString } from '../../lib/time';
 
 // DESIGN §7 (revised per Week 5 feedback): the chip is always visible so it
-// never pops in and out of the header. Zero pending = a quiet "synced" state
-// (check icon + last-synced time); non-empty queue = count + state icon from
-// queueStatus: syncing (subtle spinner), offline (cloud-off), auth (key — the
-// banner carries the action). The always-mounted polite live region announces
-// the transitions ("3 entries pending sync" → "All entries synced").
+// never pops in and out of the header. Zero pending = a quiet synced state
+// ("Synced HH:MM", word hidden on narrow screens); non-empty queue = count +
+// state icon from queueStatus. The pending state is *debounced*: it appears
+// only after the queue has been non-empty for a beat, and once shown it holds
+// briefly — a ~100ms online flush never flickers the chip at all, while a
+// real offline stretch shows honestly. The always-mounted polite live region
+// announces the transitions ("3 entries pending sync" → "All entries synced")
+// off the real queue state, not the debounced display.
+
+const PENDING_SHOW_DELAY_MS = 400;
+const PENDING_MIN_VISIBLE_MS = 600;
 
 function entriesWord(n: number): string {
   return n === 1 ? 'entry' : 'entries';
@@ -24,10 +30,40 @@ function formatSyncTime(ts: number): string {
   return `${d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}, ${time}`;
 }
 
+// Debounce the pending display so sub-second syncs never flash the chip.
+function usePendingDisplay(pending: number): boolean {
+  const [visible, setVisible] = useState(false);
+  const shownAt = useRef(0);
+
+  useEffect(() => {
+    if (pending > 0 && !visible) {
+      const timer = setTimeout(() => {
+        shownAt.current = Date.now();
+        setVisible(true);
+      }, PENDING_SHOW_DELAY_MS);
+      return () => clearTimeout(timer);
+    }
+    if (pending === 0 && visible) {
+      const remaining = Math.max(0, PENDING_MIN_VISIBLE_MS - (Date.now() - shownAt.current));
+      const timer = setTimeout(() => setVisible(false), remaining);
+      return () => clearTimeout(timer);
+    }
+  }, [pending, visible]);
+
+  return visible;
+}
+
 export function SyncChip({ userId }: { userId: string }) {
   const pending = usePendingCount(userId);
   const status = useQueueStatusStore((s) => s.status);
   const lastSyncedAt = useQueueStatusStore((s) => s.lastSyncedAt) ?? loadLastSync(userId);
+  const showPending = usePendingDisplay(pending);
+
+  // During the brief hold after a drain, `pending` is already 0 — keep the
+  // last real count on screen instead of flashing "0".
+  const lastCount = useRef(0);
+  if (pending > 0) lastCount.current = pending;
+  const displayCount = pending > 0 ? pending : lastCount.current;
 
   const [announcement, setAnnouncement] = useState('');
   const prevPending = useRef(0);
@@ -49,15 +85,15 @@ export function SyncChip({ userId }: { userId: string }) {
       <span aria-live="polite" role="status" className="sr-only">
         {announcement}
       </span>
-      {pending > 0 ? (
+      {showPending ? (
         <span
-          title={`${pending} ${entriesWord(pending)} pending sync (${stateLabel})`}
+          title={`${displayCount} ${entriesWord(displayCount)} pending sync (${stateLabel})`}
           className="flex shrink-0 items-center gap-1.5 rounded-full border border-slate-300 px-2.5 py-1 text-xs tabular-nums text-slate-600 dark:border-slate-600 dark:text-slate-300"
         >
           {state === 'syncing' ? <SpinnerIcon /> : state === 'auth' ? <KeyIcon /> : <CloudOffIcon />}
-          {pending}
+          {displayCount}
           <span className="sr-only">
-            {entriesWord(pending)} pending sync, {stateLabel}
+            {entriesWord(displayCount)} pending sync, {stateLabel}
           </span>
         </span>
       ) : (
@@ -69,7 +105,9 @@ export function SyncChip({ userId }: { userId: string }) {
           }
           className="flex shrink-0 items-center gap-1.5 rounded-full border border-transparent px-2.5 py-1 text-xs tabular-nums text-slate-400 dark:text-slate-500"
         >
-          <CheckIcon />
+          <CloudCheckIcon />
+          {/* The word squeezes out on narrow screens; the time stays. */}
+          <span className="hidden sm:inline">Synced</span>
           {lastSyncedAt !== null && formatSyncTime(lastSyncedAt)}
           <span className="sr-only">all entries synced</span>
         </span>
@@ -90,10 +128,13 @@ const iconProps = {
   strokeLinejoin: 'round',
 } as const;
 
-function CheckIcon() {
+// Same cloud silhouette as the offline icon (Week 5 feedback: cohesion), with
+// a check instead of the slash.
+function CloudCheckIcon() {
   return (
     <svg {...iconProps}>
-      <path d="M20 6 9 17l-5-5" />
+      <path d="M17.5 19a4.5 4.5 0 1 0-.42-8.98A6 6 0 0 0 5.34 12.06 3.5 3.5 0 0 0 6.5 19h11z" />
+      <path d="m9 15 2 2 4-4" />
     </svg>
   );
 }
