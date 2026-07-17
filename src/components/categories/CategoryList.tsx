@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { CategoryRow } from '../../lib/db/categories';
 import { useDeleteCategory, useUpdateCategory } from '../../hooks/useCategories';
+import { useTransientMessage } from '../../hooks/useTransientMessage';
 import { PaletteColorPicker } from '../labels/PaletteColorPicker';
 import { categoryFormSchema } from '../../lib/schemas';
 import { toFriendlyErrorMessage } from '../../lib/errorMessage';
@@ -11,19 +12,35 @@ interface CategoryListProps {
 }
 
 export function CategoryList({ userId, categories }: CategoryListProps) {
+  // List-level so a delete's confirmation survives its row unmounting.
+  const [notice, showNotice] = useTransientMessage();
+
   if (categories.length === 0) {
     return <p className="text-sm text-slate-500 dark:text-slate-400">No categories yet.</p>;
   }
   return (
-    <ul className="space-y-2">
-      {categories.map((category) => (
-        <CategoryRowItem key={category.id} userId={userId} category={category} />
-      ))}
-    </ul>
+    <div>
+      <span role="status" className="block text-sm text-emerald-600 empty:hidden dark:text-emerald-400">
+        {notice}
+      </span>
+      <ul className="mt-1 space-y-2">
+        {categories.map((category) => (
+          <CategoryRowItem key={category.id} userId={userId} category={category} onDone={showNotice} />
+        ))}
+      </ul>
+    </div>
   );
 }
 
-function CategoryRowItem({ userId, category }: { userId: string; category: CategoryRow }) {
+function CategoryRowItem({
+  userId,
+  category,
+  onDone,
+}: {
+  userId: string;
+  category: CategoryRow;
+  onDone: (message: string) => void;
+}) {
   const [editing, setEditing] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [name, setName] = useState(category.name);
@@ -47,6 +64,7 @@ function CategoryRowItem({ userId, category }: { userId: string; category: Categ
       }
       setError(null);
       setEditing(false);
+      onDone('Category saved');
     } catch (e) {
       setError(toFriendlyErrorMessage(e));
     }
@@ -57,6 +75,7 @@ function CategoryRowItem({ userId, category }: { userId: string; category: Categ
       await deleteCategory.mutateAsync(category.id);
       setDeleteError(null);
       setConfirmingDelete(false);
+      onDone('Category deleted');
     } catch (e) {
       setDeleteError(toFriendlyErrorMessage(e));
     }
@@ -118,7 +137,8 @@ function CategoryRowItem({ userId, category }: { userId: string; category: Categ
           onClick={() => setEditing(true)}
           className="rounded px-2 py-1 text-sm text-slate-600 hover:bg-slate-100 focus-visible:ring-2 focus-visible:ring-offset-2 dark:text-slate-300 dark:hover:bg-slate-700"
         >
-          Rename
+          {/* "Edit", not "Rename" — the form also changes the color. */}
+          Edit
         </button>
         {confirmingDelete ? (
           <span className="flex items-center gap-1 text-sm">

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { LabelRow } from '../../lib/db/labels';
 import type { CategoryRow } from '../../lib/db/categories';
 import { useSoftDeleteLabel, useUpdateLabel } from '../../hooks/useLabels';
+import { useTransientMessage } from '../../hooks/useTransientMessage';
 import { PaletteColorPicker } from './PaletteColorPicker';
 import { labelFormSchema } from '../../lib/schemas';
 import { toFriendlyErrorMessage } from '../../lib/errorMessage';
@@ -13,15 +14,29 @@ interface LabelListProps {
 }
 
 export function LabelList({ userId, labels, categories }: LabelListProps) {
+  // List-level so a delete's confirmation survives its row unmounting.
+  const [notice, showNotice] = useTransientMessage();
+
   if (labels.length === 0) {
     return <p className="text-sm text-slate-500 dark:text-slate-400">No labels yet.</p>;
   }
   return (
-    <ul className="space-y-2">
-      {labels.map((label) => (
-        <LabelRowItem key={label.id} userId={userId} label={label} categories={categories} />
-      ))}
-    </ul>
+    <div>
+      <span role="status" className="block text-sm text-emerald-600 empty:hidden dark:text-emerald-400">
+        {notice}
+      </span>
+      <ul className="mt-1 space-y-2">
+        {labels.map((label) => (
+          <LabelRowItem
+            key={label.id}
+            userId={userId}
+            label={label}
+            categories={categories}
+            onDone={showNotice}
+          />
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -29,10 +44,12 @@ function LabelRowItem({
   userId,
   label,
   categories,
+  onDone,
 }: {
   userId: string;
   label: LabelRow;
   categories: CategoryRow[];
+  onDone: (message: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -61,6 +78,7 @@ function LabelRowItem({
       }
       setError(null);
       setEditing(false);
+      onDone('Label saved');
     } catch (e) {
       setError(toFriendlyErrorMessage(e));
     }
@@ -71,6 +89,7 @@ function LabelRowItem({
       await softDeleteLabel.mutateAsync(label.id);
       setDeleteError(null);
       setConfirmingDelete(false);
+      onDone('Label deleted — restorable under Deleted labels');
     } catch (e) {
       // Leave the confirm row open with the error visible instead of
       // silently closing it — a stale-cached label whose row no longer
@@ -140,9 +159,16 @@ function LabelRowItem({
   return (
     <li className="rounded border border-slate-200 p-3 dark:border-slate-700">
       <div className="flex items-center justify-between">
-      <div className="flex items-center gap-2">
-        <span aria-hidden="true" className="h-5 w-5 rounded-full" style={{ backgroundColor: label.color }} />
-        <span className="text-sm text-slate-900 dark:text-slate-50">{label.name}</span>
+      <div className="flex min-w-0 items-center gap-2">
+        <span aria-hidden="true" className="h-5 w-5 shrink-0 rounded-full" style={{ backgroundColor: label.color }} />
+        <span className="truncate text-sm text-slate-900 dark:text-slate-50">{label.name}</span>
+        {/* Which category a label belongs to was invisible outside the edit
+            form (Week 5 feedback). */}
+        {label.category_id && (
+          <span className="truncate text-xs text-slate-400 dark:text-slate-500">
+            {categories.find((c) => c.id === label.category_id)?.name}
+          </span>
+        )}
       </div>
       <div className="flex items-center gap-2">
         <button
@@ -150,7 +176,8 @@ function LabelRowItem({
           onClick={() => setEditing(true)}
           className="rounded px-2 py-1 text-sm text-slate-600 hover:bg-slate-100 focus-visible:ring-2 focus-visible:ring-offset-2 dark:text-slate-300 dark:hover:bg-slate-700"
         >
-          Rename
+          {/* "Edit", not "Rename" — the form also changes color and category. */}
+          Edit
         </button>
         {confirmingDelete ? (
           <span className="flex items-center gap-1 text-sm">
