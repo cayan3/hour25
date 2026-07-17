@@ -8,7 +8,8 @@ import { loadMru, MRU_DISPLAY_LIMIT } from '../../lib/mru';
 // One combobox component, rendered as an anchored popover (desktop) or a
 // bottom sheet (mobile) — DESIGN §4. Structure: search input → Recent (≤9,
 // number keys) → divider → full active list alphabetical grouped by category
-// → Clear slot pinned last (only when the slot has an entry).
+// → Clear slot truly pinned in a footer below the scrolling list (only when
+// the slot has an entry), so a long label list never hides it.
 //
 // TODO (Week 5, notes): the note textarea lives below this list — saved with
 // the label choice or as an update to the slot's existing entry. Not built
@@ -27,13 +28,14 @@ interface LabelPickerProps {
   onClose: () => void;
 }
 
-type PickerOption =
-  | { kind: 'label'; label: LabelRow; shortcut: number | null }
-  | { kind: 'clear' };
+interface LabelOption {
+  label: LabelRow;
+  shortcut: number | null;
+}
 
 interface OptionGroup {
   heading: string | null;
-  options: PickerOption[];
+  options: LabelOption[];
 }
 
 const POPOVER_WIDTH = 320;
@@ -77,13 +79,13 @@ export function LabelPicker({
       const matches = labels.filter((l) => l.name.toLowerCase().includes(trimmed));
       result.push({
         heading: null,
-        options: matches.map((label) => ({ kind: 'label' as const, label, shortcut: null })),
+        options: matches.map((label) => ({ label, shortcut: null })),
       });
     } else {
       if (recents.length) {
         result.push({
           heading: 'Recent',
-          options: recents.map((label, i) => ({ kind: 'label' as const, label, shortcut: i + 1 })),
+          options: recents.map((label, i) => ({ label, shortcut: i + 1 })),
         });
       }
       // Full active list, alphabetical (already sorted by the db helper),
@@ -94,7 +96,7 @@ export function LabelPicker({
         if (inCategory.length) {
           result.push({
             heading: category.name,
-            options: inCategory.map((label) => ({ kind: 'label' as const, label, shortcut: null })),
+            options: inCategory.map((label) => ({ label, shortcut: null })),
           });
         }
       }
@@ -104,16 +106,12 @@ export function LabelPicker({
       if (uncategorized.length) {
         result.push({
           heading: categories.length ? 'No category' : null,
-          options: uncategorized.map((label) => ({ kind: 'label' as const, label, shortcut: null })),
+          options: uncategorized.map((label) => ({ label, shortcut: null })),
         });
       }
     }
-
-    if (hasEntry) {
-      result.push({ heading: null, options: [{ kind: 'clear' }] });
-    }
     return result;
-  }, [query, labels, categories, recents, hasEntry]);
+  }, [query, labels, categories, recents]);
 
   const flatOptions = useMemo(() => groups.flatMap((g) => g.options), [groups]);
 
@@ -132,12 +130,6 @@ export function LabelPicker({
       ?.scrollIntoView({ block: 'nearest' });
   }, [activeIndex, slotIndex]);
 
-  function choose(option: PickerOption | undefined): void {
-    if (!option) return;
-    if (option.kind === 'clear') onClear();
-    else onSelect(option.label.id);
-  }
-
   function handleKeyDown(e: React.KeyboardEvent): void {
     if (e.key === 'Escape') {
       e.preventDefault();
@@ -153,13 +145,15 @@ export function LabelPicker({
     }
     if (e.key === 'Enter') {
       e.preventDefault();
-      choose(flatOptions[activeIndex]);
+      const option = flatOptions[activeIndex];
+      if (option) onSelect(option.label.id);
       return;
     }
     // Delete clears the slot while the search is empty — matches the grid's
     // Delete-to-clear so the key works whether or not the picker is open.
-    // (Backspace stays a text-editing key; an accidental clear from emptying
-    // the search box would be too surprising.)
+    // (Backspace stays a text-editing key here even though it's the key Mac
+    // keyboards label "delete" — fn+Delete sends the real Delete. An
+    // accidental clear from emptying the search box would be too surprising.)
     if (e.key === 'Delete' && query === '' && hasEntry) {
       e.preventDefault();
       onClear();
@@ -243,31 +237,15 @@ export function LabelPicker({
                   optionIndex += 1;
                   const index = optionIndex;
                   const active = index === activeIndex;
-                  const base = `flex min-h-11 w-full cursor-pointer touch-manipulation items-center gap-2 rounded px-3 py-2 text-left text-sm ${
-                    active ? 'bg-slate-100 dark:bg-slate-700' : ''
-                  }`;
-                  if (option.kind === 'clear') {
-                    return (
-                      <li
-                        key="clear"
-                        id={optionId(slotIndex, index)}
-                        role="option"
-                        aria-selected={active}
-                        className={`${base} border-t border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300`}
-                        onMouseEnter={() => setActiveIndex(index)}
-                        onClick={onClear}
-                      >
-                        Clear slot
-                      </li>
-                    );
-                  }
                   return (
                     <li
                       key={option.label.id}
                       id={optionId(slotIndex, index)}
                       role="option"
                       aria-selected={active}
-                      className={base}
+                      className={`flex min-h-11 w-full cursor-pointer touch-manipulation items-center gap-2 rounded px-3 py-2 text-left text-sm ${
+                        active ? 'bg-slate-100 dark:bg-slate-700' : ''
+                      }`}
                       onMouseEnter={() => setActiveIndex(index)}
                       onClick={() => onSelect(option.label.id)}
                     >
@@ -289,6 +267,15 @@ export function LabelPicker({
             </li>
           ))}
         </ul>
+        {hasEntry && (
+          <button
+            type="button"
+            onClick={onClear}
+            className="mt-1 flex min-h-11 w-full shrink-0 touch-manipulation items-center rounded-b border-t border-slate-200 px-3 py-2 text-left text-sm text-slate-600 focus-visible:ring-2 focus-visible:ring-offset-2 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700"
+          >
+            Clear slot
+          </button>
+        )}
       </div>
     </>
   );

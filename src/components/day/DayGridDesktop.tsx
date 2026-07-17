@@ -181,6 +181,8 @@ const SlotCell = forwardRef<HTMLButtonElement, SlotCellProps>(function SlotCell(
     Boolean(entry?.note),
   );
 
+  // Ring offsets are pinned to the page background per theme so rings read as
+  // a single clean sky line instead of a white halo (repass feedback).
   return (
     <button
       ref={ref}
@@ -191,7 +193,7 @@ const SlotCell = forwardRef<HTMLButtonElement, SlotCellProps>(function SlotCell(
       tabIndex={tabIndex}
       onFocus={onFocus}
       onClick={onClick}
-      className={`relative h-10 touch-manipulation rounded focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-offset-2 motion-safe:transition-colors motion-safe:duration-100 ${
+      className={`relative h-10 touch-manipulation rounded ring-offset-slate-50 focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-offset-2 motion-safe:transition-colors motion-safe:duration-100 dark:ring-offset-slate-900 ${
         isOpen ? 'z-10 ring-2 ring-sky-500 ring-offset-1' : ''
       } ${
         filled
@@ -210,11 +212,12 @@ const SlotCell = forwardRef<HTMLButtonElement, SlotCellProps>(function SlotCell(
         />
       )}
       {isNow && (
-        <span
-          aria-hidden="true"
-          title="Now"
-          className="absolute -bottom-1 left-0 z-[1] h-0.5 w-full rounded bg-sky-500"
-        />
+        // The visible bar sits flush with the cell's bottom edge; the wrapper
+        // is a taller invisible hover target so the "Now" tooltip is easy to
+        // reach even on a filled cell.
+        <span title="Now" className="absolute inset-x-0 bottom-0 z-[1] h-2">
+          <span aria-hidden="true" className="absolute inset-x-0 bottom-0 h-0.5 rounded bg-sky-500" />
+        </span>
       )}
     </button>
   );

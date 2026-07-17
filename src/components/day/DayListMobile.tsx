@@ -8,10 +8,11 @@ import { SLOTS_PER_DAY } from '../../lib/constants';
 // DESIGN §3 (revised per C-60, Week 4 live feedback): the vertical list shows
 // all 48 slot rows at all times — no run collapsing. Collapsed runs shifted
 // rows around as labels were applied, which read as edits landing on the
-// wrong slot. A filled row is shaded edge-to-edge in its label's color; an
-// empty row stays transparent with a dashed placeholder. Every empty row
-// directly after a filled row offers a one-tap "same as previous" chip
-// carrying that previous slot's label (C-61 — stateless, survives reload).
+// wrong slot. A filled row is shaded in its label's color from the end of an
+// uncolored time gutter to the right edge; an empty row stays transparent
+// with a dashed placeholder. Every empty row directly after a filled row
+// offers a one-tap "same as previous" chip carrying that previous slot's
+// label (C-61 — stateless, survives reload).
 
 interface DayListMobileProps {
   date: string;
@@ -143,10 +144,16 @@ const SlotRow = forwardRef<HTMLButtonElement, SlotRowProps>(function SlotRow(
   );
   const fg = label ? contrastText(label.color) : undefined;
 
+  // The time gutter stays uncolored so times form a clean scannable rail; the
+  // label color fills the rest of the row edge-to-edge (repass feedback). The
+  // chip overlays the row's right side so the row (and its focus/open ring)
+  // keeps a constant width whether or not a chip is present.
   return (
-    <div ref={nowRowRef} className="relative flex items-center">
+    <div ref={nowRowRef} className="relative flex items-stretch">
       {isNow && (
-        <span title="Now" className="absolute inset-y-0 left-0 z-[1] w-0.5 rounded bg-sky-500" />
+        <span title="Now" className="absolute inset-y-0 left-0 z-[1] w-1.5">
+          <span aria-hidden="true" className="absolute inset-y-0 left-0 w-0.5 rounded bg-sky-500" />
+        </span>
       )}
       <button
         ref={ref}
@@ -156,18 +163,18 @@ const SlotRow = forwardRef<HTMLButtonElement, SlotRowProps>(function SlotRow(
         tabIndex={tabIndex}
         onFocus={onFocus}
         onClick={onOpen}
-        style={label ? { backgroundColor: label.color, color: fg } : undefined}
-        className={`flex min-h-11 min-w-0 flex-1 touch-manipulation items-center gap-3 px-3 py-1.5 text-left text-sm focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-offset-2 motion-safe:transition-colors motion-safe:duration-100 ${
+        className={`flex min-h-11 w-full touch-manipulation items-stretch text-left text-sm ring-offset-slate-50 focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-offset-2 motion-safe:transition-colors motion-safe:duration-100 dark:ring-offset-slate-900 ${
           isOpen ? 'z-10 ring-2 ring-inset ring-sky-500' : ''
         } ${label ? '' : 'border-b border-slate-100 dark:border-slate-800'}`}
       >
-        <span
-          className={`w-12 shrink-0 tabular-nums ${label ? 'opacity-80' : 'text-slate-500 dark:text-slate-400'}`}
-        >
+        <span className="flex w-14 shrink-0 items-center pl-3 tabular-nums text-slate-500 dark:text-slate-400">
           {slotTimeShort(slotIndex)}
         </span>
         {entry ? (
-          <span className="flex min-w-0 flex-1 items-center justify-end gap-2">
+          <span
+            className="my-0.5 flex min-w-0 flex-1 items-center justify-end gap-2 rounded-l px-3"
+            style={label ? { backgroundColor: label.color, color: fg } : undefined}
+          >
             {entry.note && fg && (
               <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: fg }} />
             )}
@@ -176,18 +183,20 @@ const SlotRow = forwardRef<HTMLButtonElement, SlotRowProps>(function SlotRow(
             </span>
           </span>
         ) : (
-          <span
-            className={`h-5 flex-1 rounded border border-dashed border-slate-300 dark:border-slate-600 ${
-              isHint && !isOpen ? 'ring-2 ring-sky-500' : ''
-            }`}
-          />
+          <span className={`flex flex-1 items-center py-1.5 ${chip ? 'mr-36' : 'mr-3'}`}>
+            <span
+              className={`h-5 w-full rounded border border-dashed border-slate-300 dark:border-slate-600 ${
+                isHint && !isOpen ? 'ring-2 ring-sky-500' : ''
+              }`}
+            />
+          </span>
         )}
       </button>
       {!entry && chip && (
         <button
           type="button"
           onClick={() => onAssignSame(chip.id)}
-          className="mr-2 flex min-h-11 shrink-0 touch-manipulation items-center gap-1.5 rounded-full border border-slate-300 px-3 text-xs text-slate-600 focus-visible:ring-2 focus-visible:ring-offset-2 dark:border-slate-600 dark:text-slate-300"
+          className="absolute inset-y-0 right-2 z-[1] flex touch-manipulation items-center gap-1.5 rounded-full border border-slate-300 bg-slate-50 px-3 text-xs text-slate-600 focus-visible:ring-2 focus-visible:ring-offset-2 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300"
         >
           <Swatch color={chip.color} />
           Same as previous
