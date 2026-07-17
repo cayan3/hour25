@@ -17,7 +17,6 @@ export function useSlotActions(
   labelNameById: (labelId: string) => string,
 ) {
   const recordAction = useDayStore((s) => s.recordAction);
-  const setLastAssign = useDayStore((s) => s.setLastAssign);
 
   return useMemo(() => {
     const snapshotOf = (slotIndex: number): SlotSnapshot | null => {
@@ -40,7 +39,6 @@ export function useSlotActions(
         chunkMinutes: prev?.chunkMinutes,
       });
       recordLabelUse(userId, labelId);
-      setLastAssign(slotIndex, labelId);
       recordAction({ date, slotIndex, prev, description: `Logged ${labelNameById(labelId)}` });
     };
 
@@ -52,7 +50,7 @@ export function useSlotActions(
     };
 
     return { assign, clear };
-  }, [userId, date, merged, labelNameById, recordAction, setLastAssign]);
+  }, [userId, date, merged, labelNameById, recordAction]);
 }
 
 // Undo lives outside useSlotActions because it must apply to lastAction's own

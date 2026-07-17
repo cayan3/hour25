@@ -156,6 +156,15 @@ export function LabelPicker({
       choose(flatOptions[activeIndex]);
       return;
     }
+    // Delete clears the slot while the search is empty — matches the grid's
+    // Delete-to-clear so the key works whether or not the picker is open.
+    // (Backspace stays a text-editing key; an accidental clear from emptying
+    // the search box would be too surprising.)
+    if (e.key === 'Delete' && query === '' && hasEntry) {
+      e.preventDefault();
+      onClear();
+      return;
+    }
     // Number keys 1–9 select the corresponding Recent label — only while the
     // search is empty (digits are ordinary characters once you're filtering).
     if (query === '' && /^[1-9]$/.test(e.key)) {

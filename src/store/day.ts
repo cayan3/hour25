@@ -40,15 +40,11 @@ interface DayState {
   activeDate: string;
   openPicker: OpenPicker | null;
   lastAction: LastAction | null;
-  // After an assignment, the next empty row on mobile offers a one-tap
-  // "same as previous" chip (DESIGN §3). Cleared on date change.
-  lastAssign: { slotIndex: number; labelId: string } | null;
   setActiveDate: (date: string) => void;
   showPicker: (slotIndex: number, anchor?: PickerAnchor | null) => void;
   closePicker: () => void;
   recordAction: (action: Omit<LastAction, 'id'>) => void;
   clearLastAction: () => void;
-  setLastAssign: (slotIndex: number, labelId: string) => void;
 }
 
 let actionNonce = 0;
@@ -57,11 +53,9 @@ export const useDayStore = create<DayState>((set) => ({
   activeDate: localDateString(),
   openPicker: null,
   lastAction: null,
-  lastAssign: null,
-  setActiveDate: (activeDate) => set({ activeDate, openPicker: null, lastAssign: null }),
+  setActiveDate: (activeDate) => set({ activeDate, openPicker: null }),
   showPicker: (slotIndex, anchor = null) => set({ openPicker: { slotIndex, anchor } }),
   closePicker: () => set({ openPicker: null }),
   recordAction: (action) => set({ lastAction: { ...action, id: ++actionNonce } }),
   clearLastAction: () => set({ lastAction: null }),
-  setLastAssign: (slotIndex, labelId) => set({ lastAssign: { slotIndex, labelId } }),
 }));

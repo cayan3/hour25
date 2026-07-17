@@ -26,24 +26,22 @@ export function computeRuns(entries: MergedEntry[]): LabelRun[] {
 
 // A run clipped at row boundaries on the 4×12 desktop grid: a 23:00–07:00
 // sleep run renders as two blocks (end of row 4, start of row 1) — correct,
-// not a bug (DESIGN §2). runLength is the *unclipped* run's length, for the
-// 1–2-slot abbreviation rule.
+// not a bug (DESIGN §2). The label name renders space-based per segment (CSS
+// truncation) — no slot-count abbreviation rule.
 export interface RunSegment {
   start: number; // slot index, inclusive
   end: number; // slot index, inclusive
   labelId: string;
-  runLength: number;
 }
 
 export function clipRunsToRows(runs: LabelRun[], slotsPerRow: number): RunSegment[] {
   const segments: RunSegment[] = [];
   for (const run of runs) {
-    const runLength = run.end - run.start + 1;
     let start = run.start;
     while (start <= run.end) {
       const rowEnd = (Math.floor(start / slotsPerRow) + 1) * slotsPerRow - 1;
       const end = Math.min(run.end, rowEnd);
-      segments.push({ start, end, labelId: run.labelId, runLength });
+      segments.push({ start, end, labelId: run.labelId });
       start = end + 1;
     }
   }

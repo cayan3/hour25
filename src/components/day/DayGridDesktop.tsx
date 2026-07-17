@@ -28,7 +28,7 @@ interface DayGridDesktopProps {
   onOpenPicker: (slotIndex: number, anchor: PickerAnchor) => void;
   onAssignLast: (slotIndex: number) => void; // Shift+Enter (DESIGN §2)
   onClear: (slotIndex: number) => void; // Delete/Backspace (C-30)
-  pickerOpen: boolean;
+  openSlotIndex: number | null; // which cell's picker is open — gets a visible ring
 }
 
 export function DayGridDesktop({
@@ -40,7 +40,7 @@ export function DayGridDesktop({
   onOpenPicker,
   onAssignLast,
   onClear,
-  pickerOpen,
+  openSlotIndex,
 }: DayGridDesktopProps) {
   const [focusedSlot, setFocusedSlot] = useState(0);
   const cellRefs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -54,6 +54,7 @@ export function DayGridDesktop({
   }, [merged]);
 
   // Return focus to the grid when the picker closes (it stole it on open).
+  const pickerOpen = openSlotIndex !== null;
   useEffect(() => {
     if (wasPickerOpen.current && !pickerOpen) cellRefs.current[focusedSlot]?.focus();
     wasPickerOpen.current = pickerOpen;
@@ -138,6 +139,7 @@ export function DayGridDesktop({
                   label={labelFor(entryBySlot.get(slotIndex) ?? null, labelById)}
                   isNow={slotIndex === nowSlot}
                   isHint={slotIndex === hintSlot}
+                  isOpen={slotIndex === openSlotIndex}
                   tabIndex={slotIndex === focusedSlot ? 0 : -1}
                   onFocus={() => setFocusedSlot(slotIndex)}
                   onClick={() => openPickerAt(slotIndex)}
@@ -162,13 +164,14 @@ interface SlotCellProps {
   label: LabelRow | null;
   isNow: boolean;
   isHint: boolean;
+  isOpen: boolean; // this cell's picker is open
   tabIndex: number;
   onFocus: () => void;
   onClick: () => void;
 }
 
 const SlotCell = forwardRef<HTMLButtonElement, SlotCellProps>(function SlotCell(
-  { slotIndex, entry, segment, label, isNow, isHint, tabIndex, onFocus, onClick },
+  { slotIndex, entry, segment, label, isNow, isHint, isOpen, tabIndex, onFocus, onClick },
   ref,
 ) {
   const filled = entry !== null;
@@ -184,14 +187,17 @@ const SlotCell = forwardRef<HTMLButtonElement, SlotCellProps>(function SlotCell(
       type="button"
       role="gridcell"
       aria-label={accessibleName}
+      title={label ? `${label.name}${label.deleted_at !== null ? ' (deleted)' : ''}` : undefined}
       tabIndex={tabIndex}
       onFocus={onFocus}
       onClick={onClick}
       className={`relative h-10 touch-manipulation rounded focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-offset-2 motion-safe:transition-colors motion-safe:duration-100 ${
+        isOpen ? 'z-10 ring-2 ring-sky-500 ring-offset-1' : ''
+      } ${
         filled
           ? ''
           : `border border-dashed border-slate-300 dark:border-slate-600 ${
-              isHint ? 'ring-2 ring-sky-500 ring-offset-1' : ''
+              isHint && !isOpen ? 'ring-2 ring-sky-500 ring-offset-1' : ''
             }`
       }`}
     >
@@ -206,7 +212,8 @@ const SlotCell = forwardRef<HTMLButtonElement, SlotCellProps>(function SlotCell(
       {isNow && (
         <span
           aria-hidden="true"
-          className="pointer-events-none absolute -bottom-1 left-0 z-[1] h-0.5 w-full rounded bg-sky-500"
+          title="Now"
+          className="absolute -bottom-1 left-0 z-[1] h-0.5 w-full rounded bg-sky-500"
         />
       )}
     </button>
@@ -216,21 +223,21 @@ const SlotCell = forwardRef<HTMLButtonElement, SlotCellProps>(function SlotCell(
 // The visual body of a merged run segment: background + the label name painted
 // once, spanning the segment's cells (and the 2px gaps between them). Sits
 // under the transparent cell buttons and never intercepts a click — the slot
-// element is what you click (C-41).
+// element is what you click (C-41). The name shows as many characters as the
+// segment's width fits (CSS truncation) — no slot-count abbreviation.
 function SegmentOverlay({ segment, label }: { segment: RunSegment; label: LabelRow }) {
   const len = segment.end - segment.start + 1;
-  const name = segment.runLength <= 2 ? label.name.slice(0, 2) : label.name;
   return (
     <span
       aria-hidden="true"
-      className="pointer-events-none absolute inset-y-0 left-0 flex items-center overflow-hidden rounded px-1.5 text-xs font-medium"
+      className="pointer-events-none absolute inset-y-0 left-0 flex items-center overflow-hidden rounded px-1 text-xs font-medium"
       style={{
         width: `calc(${len * 100}% + ${(len - 1) * GAP_PX}px)`,
         backgroundColor: label.color,
         color: contrastText(label.color),
       }}
     >
-      <span className="truncate">{name}</span>
+      <span className="truncate">{label.name}</span>
     </span>
   );
 }

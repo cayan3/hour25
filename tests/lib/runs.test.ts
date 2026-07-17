@@ -55,30 +55,30 @@ describe('computeRuns', () => {
 });
 
 describe('clipRunsToRows', () => {
-  it('a run inside one row is a single segment carrying the full run length', () => {
+  it('a run inside one row stays a single segment', () => {
     expect(clipRunsToRows([{ start: 2, end: 5, labelId: 'a' }], 12)).toEqual([
-      { start: 2, end: 5, labelId: 'a', runLength: 4 },
+      { start: 2, end: 5, labelId: 'a' },
     ]);
   });
 
   it('clips a run crossing a row boundary into two segments (DESIGN §2: correct, not a bug)', () => {
     expect(clipRunsToRows([{ start: 10, end: 14, labelId: 'a' }], 12)).toEqual([
-      { start: 10, end: 11, labelId: 'a', runLength: 5 },
-      { start: 12, end: 14, labelId: 'a', runLength: 5 },
+      { start: 10, end: 11, labelId: 'a' },
+      { start: 12, end: 14, labelId: 'a' },
     ]);
   });
 
   it('a run spanning several full rows produces one segment per row', () => {
     expect(clipRunsToRows([{ start: 0, end: 35, labelId: 'a' }], 12)).toEqual([
-      { start: 0, end: 11, labelId: 'a', runLength: 36 },
-      { start: 12, end: 23, labelId: 'a', runLength: 36 },
-      { start: 24, end: 35, labelId: 'a', runLength: 36 },
+      { start: 0, end: 11, labelId: 'a' },
+      { start: 12, end: 23, labelId: 'a' },
+      { start: 24, end: 35, labelId: 'a' },
     ]);
   });
 
   it('a run ending exactly at a row boundary does not spill a segment into the next row', () => {
     expect(clipRunsToRows([{ start: 8, end: 11, labelId: 'a' }], 12)).toEqual([
-      { start: 8, end: 11, labelId: 'a', runLength: 4 },
+      { start: 8, end: 11, labelId: 'a' },
     ]);
   });
 });

@@ -41,7 +41,6 @@ export function DayView({ userId }: { userId: string }) {
   const openPicker = useDayStore((s) => s.openPicker);
   const showPicker = useDayStore((s) => s.showPicker);
   const closePicker = useDayStore((s) => s.closePicker);
-  const lastAssign = useDayStore((s) => s.lastAssign);
 
   const merged = useDayEntries(userId, activeDate);
   const { data: activeLabels } = useActiveLabels(userId);
@@ -173,7 +172,7 @@ export function DayView({ userId }: { userId: string }) {
             onOpenPicker={(slotIndex, anchor) => showPicker(slotIndex, anchor)}
             onAssignLast={assignLastUsed}
             onClear={clearSlot}
-            pickerOpen={openPicker !== null}
+            openSlotIndex={openPicker?.slotIndex ?? null}
           />
         ) : (
           <DayListMobile
@@ -182,12 +181,13 @@ export function DayView({ userId }: { userId: string }) {
             labelById={labelById}
             nowSlot={nowSlot}
             hintSlot={hintSlot}
-            lastAssign={lastAssign}
+            openSlotIndex={openPicker?.slotIndex ?? null}
             onOpenPicker={(slotIndex) => showPicker(slotIndex)}
             onAssignSame={(slotIndex, labelId) => {
               assign(slotIndex, labelId);
               dismissHint();
             }}
+            onClear={clearSlot}
           />
         )}
       </div>
