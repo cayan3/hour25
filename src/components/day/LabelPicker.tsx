@@ -41,6 +41,29 @@ interface OptionGroup {
 const POPOVER_WIDTH = 320;
 const POPOVER_MAX_HEIGHT = 384; // matches max-h-96
 
+// The on-screen keyboard shrinks only the *visual* viewport; a bottom-fixed
+// sheet is anchored to the layout viewport and ends up behind the keyboard,
+// hiding the result list while searching. Track the keyboard's height via
+// visualViewport and lift the sheet by exactly that inset.
+function useKeyboardInset(enabled: boolean): number {
+  const [inset, setInset] = useState(0);
+
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!enabled || !vv) return;
+    const update = () => setInset(Math.max(0, window.innerHeight - vv.height - vv.offsetTop));
+    update();
+    vv.addEventListener('resize', update);
+    vv.addEventListener('scroll', update);
+    return () => {
+      vv.removeEventListener('resize', update);
+      vv.removeEventListener('scroll', update);
+    };
+  }, [enabled]);
+
+  return enabled ? inset : 0;
+}
+
 export function LabelPicker({
   userId,
   slotIndex,
@@ -176,15 +199,22 @@ export function LabelPicker({
 
   const listboxId = `slot-picker-listbox-${slotIndex}`;
 
-  const popoverStyle = useMemo<React.CSSProperties>(() => {
-    if (mode !== 'popover' || !anchor) return {};
+  const keyboardInset = useKeyboardInset(mode === 'sheet');
+
+  const containerStyle = useMemo<React.CSSProperties>(() => {
+    if (mode === 'sheet') {
+      return keyboardInset
+        ? { bottom: keyboardInset, maxHeight: `calc(100dvh - ${keyboardInset}px - 4rem)` }
+        : {};
+    }
+    if (!anchor) return {};
     const left = Math.max(8, Math.min(anchor.left, window.innerWidth - POPOVER_WIDTH - 8));
     // Flip above the cell when there isn't room below it.
     if (anchor.bottom + POPOVER_MAX_HEIGHT + 8 > window.innerHeight && anchor.top > POPOVER_MAX_HEIGHT) {
       return { left, bottom: window.innerHeight - anchor.top + 4, width: POPOVER_WIDTH };
     }
     return { left, top: anchor.bottom + 4, width: POPOVER_WIDTH };
-  }, [mode, anchor]);
+  }, [mode, anchor, keyboardInset]);
 
   let optionIndex = -1;
 
@@ -198,7 +228,7 @@ export function LabelPicker({
       <div
         role="dialog"
         aria-label={`Label for ${slotRangeLabel(slotIndex)}`}
-        style={popoverStyle}
+        style={containerStyle}
         className={
           mode === 'sheet'
             ? 'fixed inset-x-0 bottom-0 z-50 flex max-h-[70vh] flex-col rounded-t-xl bg-white p-3 shadow-xl motion-safe:animate-sheet-in dark:bg-slate-800'

@@ -189,7 +189,7 @@ const SlotRow = forwardRef<HTMLButtonElement, SlotRowProps>(function SlotRow(
         onClick={onOpen}
         className={`flex min-h-11 w-full touch-manipulation items-stretch text-left text-sm ring-offset-slate-50 focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-offset-2 motion-safe:transition-[background-color] motion-safe:duration-100 dark:ring-offset-slate-900 ${
           isOpen ? 'z-10 ring-2 ring-inset ring-sky-500' : ''
-        } ${label ? '' : 'border-b border-slate-100 dark:border-slate-800'}`}
+        }`}
       >
         {/* Right-aligned with a fixed pr: the gap to the slot block is
             identical for "x:xx" and "xx:xx", and the text clears the now bar
@@ -220,9 +220,11 @@ const SlotRow = forwardRef<HTMLButtonElement, SlotRowProps>(function SlotRow(
             )}
           </span>
         ) : (
-          <span className={`flex flex-1 items-center py-1.5 ${chip ? 'mr-36' : ''}`}>
+          // Same geometry as a filled row's color block (my-0.5, stretch) so
+          // dashed and filled slots read as the same-sized cell.
+          <span className={`flex flex-1 items-stretch ${chip ? 'mr-36' : ''}`}>
             <span
-              className={`h-5 w-full rounded border border-dashed border-slate-300 dark:border-slate-600 ${
+              className={`my-0.5 w-full rounded border border-dashed border-slate-300 dark:border-slate-600 ${
                 isHint && !isOpen ? 'ring-2 ring-sky-500' : ''
               }`}
             />
