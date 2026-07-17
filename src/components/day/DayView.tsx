@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useDayEntries } from '../../hooks/useDayEntries';
 import { useActiveLabels, useAllLabels } from '../../hooks/useLabels';
 import { useCategories } from '../../hooks/useCategories';
@@ -43,6 +43,8 @@ export function DayView({ userId, onOpenSettings }: { userId: string; onOpenSett
   const closePicker = useDayStore((s) => s.closePicker);
   const writeError = useDayStore((s) => s.writeError);
   const setWriteError = useDayStore((s) => s.setWriteError);
+  const scrollToNowNonce = useDayStore((s) => s.scrollToNowNonce);
+  const requestScrollToNow = useDayStore((s) => s.requestScrollToNow);
 
   const merged = useDayEntries(userId, activeDate);
   const { data: activeLabels } = useActiveLabels(userId);
@@ -139,29 +141,40 @@ export function DayView({ userId, onOpenSettings }: { userId: string; onOpenSett
         </div>
         <div className="flex items-center gap-1">
           {!isToday && (
+            // Pill outline so it reads as an action, distinct from the plain
+            // "Today" state badge beside the heading (Week 5 feedback). Only
+            // this button (and initial load) scrolls to now — prev/next never
+            // does.
             <button
               type="button"
-              onClick={() => setActiveDate(today)}
-              className="min-h-11 touch-manipulation rounded px-3 text-sm text-sky-600 focus-visible:ring-2 focus-visible:ring-offset-2 dark:text-sky-400"
+              onClick={() => {
+                setActiveDate(today);
+                requestScrollToNow();
+              }}
+              className="min-h-11 touch-manipulation rounded-full border border-sky-300 px-3 text-sm text-sky-600 focus-visible:ring-2 focus-visible:ring-offset-2 hover:bg-sky-50 dark:border-sky-800 dark:text-sky-400 dark:hover:bg-sky-950"
             >
               Today
             </button>
           )}
           {/* DESIGN §5: fills only the sleep window with the sleep label,
               skipping filled slots; disabled with the Settings hint below
-              when the sleep label is unset or soft-deleted. */}
-          <button
-            type="button"
-            disabled={fillSleep.state !== 'ready'}
-            aria-describedby={fillSleep.state === 'unset' ? 'fill-sleep-hint' : undefined}
-            onClick={() => {
-              fillSleep.fill();
-              dismissHint();
-            }}
-            className="min-h-11 touch-manipulation rounded px-3 text-sm text-slate-600 focus-visible:ring-2 focus-visible:ring-offset-2 enabled:hover:bg-slate-200 disabled:text-slate-400 dark:text-slate-300 dark:enabled:hover:bg-slate-800 dark:disabled:text-slate-600"
-          >
-            Fill sleep
-          </button>
+              when the sleep label is unset or soft-deleted. The wrapper
+              carries the hover tooltip — disabled buttons swallow hover in
+              some browsers. */}
+          <span title={fillSleep.state === 'unset' ? 'Set a sleep label in Settings to enable' : undefined}>
+            <button
+              type="button"
+              disabled={fillSleep.state !== 'ready'}
+              aria-describedby={fillSleep.state === 'unset' ? 'fill-sleep-hint' : undefined}
+              onClick={() => {
+                fillSleep.fill();
+                dismissHint();
+              }}
+              className="min-h-11 touch-manipulation rounded px-3 text-sm text-slate-600 focus-visible:ring-2 focus-visible:ring-offset-2 enabled:hover:bg-slate-200 disabled:text-slate-400 dark:text-slate-300 dark:enabled:hover:bg-slate-800 dark:disabled:text-slate-600"
+            >
+              Fill sleep
+            </button>
+          </span>
         </div>
       </div>
 
@@ -233,7 +246,7 @@ export function DayView({ userId, onOpenSettings }: { userId: string; onOpenSett
           />
         ) : (
           <DayListMobile
-            date={activeDate}
+            scrollToNowNonce={scrollToNowNonce}
             merged={merged}
             labelById={labelById}
             nowSlot={nowSlot}
@@ -252,6 +265,33 @@ export function DayView({ userId, onOpenSettings }: { userId: string; onOpenSett
       <p className="mt-3 px-3 text-xs text-slate-400 dark:text-slate-500 md:px-0">
         Empty slots count as untracked time.
       </p>
+
+      {isDesktop && (
+        <details className="mt-2 text-xs text-slate-400 dark:text-slate-500">
+          <summary className="inline-block cursor-pointer rounded focus-visible:ring-2 focus-visible:ring-offset-2 hover:text-slate-600 dark:hover:text-slate-300">
+            Keyboard shortcuts
+          </summary>
+          <dl className="mt-2 grid max-w-md grid-cols-[auto_1fr] gap-x-4 gap-y-1">
+            {(
+              [
+                ['Arrow keys', 'move between slots'],
+                ['Enter / Space', 'open the label picker'],
+                ['Shift+Enter', 'repeat the last-used label'],
+                ['Delete / Backspace', 'clear the focused slot'],
+                ['n', 'edit the focused slot’s note'],
+                ['1–9', 'pick a Recent label (picker open, search empty)'],
+                ['Esc', 'close the picker'],
+                ['⌘/Ctrl+Z', 'undo the last change (while the snackbar shows)'],
+              ] as const
+            ).map(([key, what]) => (
+              <Fragment key={key}>
+                <dt className="font-medium text-slate-500 dark:text-slate-400">{key}</dt>
+                <dd>{what}</dd>
+              </Fragment>
+            ))}
+          </dl>
+        </details>
+      )}
 
       {openPicker && (
         <LabelPicker

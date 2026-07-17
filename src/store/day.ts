@@ -47,6 +47,12 @@ interface DayState {
   // refusing the write (quota, private mode, iOS dropping the connection).
   // When that happens the user MUST be told — the write was silently lost.
   writeError: string | null;
+  // Scroll-to-now is an explicit intent (initial load, the Today button) —
+  // never a side effect of prev/next navigation landing on today, which made
+  // same-time-each-day comparison impossible (Week 5 feedback). The list
+  // scrolls when this nonce changes; it starts at 1 so mount scrolls once.
+  scrollToNowNonce: number;
+  requestScrollToNow: () => void;
   setActiveDate: (date: string) => void;
   showPicker: (slotIndex: number, anchor?: PickerAnchor | null, focusNote?: boolean) => void;
   closePicker: () => void;
@@ -62,6 +68,8 @@ export const useDayStore = create<DayState>((set) => ({
   openPicker: null,
   lastAction: null,
   writeError: null,
+  scrollToNowNonce: 1,
+  requestScrollToNow: () => set((s) => ({ scrollToNowNonce: s.scrollToNowNonce + 1 })),
   setActiveDate: (activeDate) => set({ activeDate, openPicker: null }),
   showPicker: (slotIndex, anchor = null, focusNote = false) =>
     set({ openPicker: { slotIndex, anchor, focusNote } }),

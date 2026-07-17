@@ -262,7 +262,11 @@ function SegmentOverlay({ segment, label }: { segment: RunSegment; label: LabelR
         color: contrastText(label.color),
       }}
     >
-      <span className="truncate">{label.name}</span>
+      {/* Strikethrough for soft-deleted labels — the mobile row and its
+          tooltip already did this; the overlay path had missed it. */}
+      <span className={`truncate ${label.deleted_at !== null ? 'line-through' : ''}`}>
+        {label.name}
+      </span>
     </span>
   );
 }

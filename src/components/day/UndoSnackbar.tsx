@@ -16,6 +16,28 @@ export function UndoSnackbar({ userId }: { userId: string }) {
     // Keyed on the action's nonce so a new action restarts the window.
   }, [lastAction?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ⌘/Ctrl+Z while the snackbar is up (Week 5 feedback — Z is the universal
+  // undo key). Living here means the listener exists exactly while undo is
+  // available; once the window lapses the browser default returns. Text
+  // fields keep their own native undo.
+  useEffect(() => {
+    if (!lastAction) return;
+    function onKeyDown(e: KeyboardEvent): void {
+      if (!(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey || e.key.toLowerCase() !== 'z') return;
+      const t = e.target;
+      if (
+        t instanceof HTMLElement &&
+        (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)
+      ) {
+        return;
+      }
+      e.preventDefault();
+      undo();
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [lastAction?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (!lastAction) return null;
 
   return (

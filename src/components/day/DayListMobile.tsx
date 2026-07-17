@@ -15,7 +15,7 @@ import { SLOTS_PER_DAY } from '../../lib/constants';
 // label (C-61 — stateless, survives reload).
 
 interface DayListMobileProps {
-  date: string;
+  scrollToNowNonce: number; // bumped on load / Today button — the only scroll triggers
   merged: MergedEntry[];
   labelById: Map<string, LabelRow>;
   nowSlot: number | null;
@@ -27,7 +27,7 @@ interface DayListMobileProps {
 }
 
 export function DayListMobile({
-  date,
+  scrollToNowNonce,
   merged,
   labelById,
   nowSlot,
@@ -44,10 +44,12 @@ export function DayListMobile({
 
   const entryBySlot = useMemo(() => new Map(merged.map((e) => [e.slotIndex, e])), [merged]);
 
-  // Auto-scroll to "now" on load (DESIGN §3) — instant, not animated.
+  // Auto-scroll to "now" only on explicit intent — initial load and the Today
+  // button (DESIGN §3, revised per Week 5 feedback): arriving at today via
+  // prev/next must NOT jump, so comparing the same time across days works.
   useEffect(() => {
     nowRowRef.current?.scrollIntoView({ block: 'center' });
-  }, [date]);
+  }, [scrollToNowNonce]);
 
   // Return focus to the list when the picker closes (it stole it on open).
   const pickerOpen = openSlotIndex !== null;
@@ -217,7 +219,20 @@ const SlotRow = forwardRef<HTMLButtonElement, SlotRowProps>(function SlotRow(
             className={`flex min-w-0 flex-1 items-center justify-end gap-2 px-3 ${
               runStart ? 'mt-0.5 rounded-t' : ''
             } ${runEnd ? 'mb-0.5 rounded-b' : ''}`}
-            style={label ? { backgroundColor: label.color, color: fg } : undefined}
+            style={
+              label
+                ? {
+                    backgroundColor: label.color,
+                    color: fg,
+                    // Interior run boundaries: each row paints its own block,
+                    // and device-pixel rounding can leave a hairline seam
+                    // between them (Week 5 feedback, faint colors) — a 1px
+                    // same-color shadow bridges the joint. Suppressed on the
+                    // run's last row, where the edge is real.
+                    boxShadow: !runEnd ? `0 1px 0 0 ${label.color}` : undefined,
+                  }
+                : undefined
+            }
           >
             {entry.note && fg && (
               <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: fg }} />
