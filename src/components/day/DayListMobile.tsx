@@ -178,7 +178,7 @@ const SlotRow = forwardRef<HTMLButtonElement, SlotRowProps>(function SlotRow(
         </span>
         {entry ? (
           <span
-            className="my-0.5 flex min-w-0 flex-1 items-center justify-end gap-2 rounded-l px-3"
+            className="my-0.5 flex min-w-0 flex-1 items-center justify-end gap-2 rounded px-3"
             style={label ? { backgroundColor: label.color, color: fg } : undefined}
           >
             {entry.note && fg && (
@@ -189,7 +189,7 @@ const SlotRow = forwardRef<HTMLButtonElement, SlotRowProps>(function SlotRow(
             </span>
           </span>
         ) : (
-          <span className={`flex flex-1 items-center py-1.5 ${chip ? 'mr-36' : 'mr-3'}`}>
+          <span className={`flex flex-1 items-center py-1.5 ${chip ? 'mr-36' : ''}`}>
             <span
               className={`h-5 w-full rounded border border-dashed border-slate-300 dark:border-slate-600 ${
                 isHint && !isOpen ? 'ring-2 ring-sky-500' : ''

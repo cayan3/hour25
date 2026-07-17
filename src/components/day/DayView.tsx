@@ -186,7 +186,9 @@ export function DayView({ userId }: { userId: string }) {
         </div>
       )}
 
-      <div className={isDesktop ? 'mt-2' : 'mt-1'}>
+      {/* px-4 keeps the mobile rows off the physical screen edge (repass
+          feedback: flush-to-edge read as crowded). */}
+      <div className={isDesktop ? 'mt-2' : 'mt-1 px-4'}>
         {isDesktop ? (
           <DayGridDesktop
             date={activeDate}

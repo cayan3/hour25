@@ -1,6 +1,7 @@
 import { offlineDB } from './store';
 import { requestFlush } from './sync';
 import { CHUNK_MINUTES } from '../constants';
+import { randomUUID } from '../uuid';
 
 export interface EntryWrite {
   date: string;
@@ -23,7 +24,7 @@ export async function enqueueMany(userId: string, ws: EntryWrite[]): Promise<voi
       note: w.note ?? null,
       chunkMinutes: w.chunkMinutes ?? CHUNK_MINUTES,
       enqueuedAt: now,
-      rev: crypto.randomUUID(),
+      rev: randomUUID(), // not crypto.randomUUID — absent on insecure origins (LAN phone testing)
       attempts: 0,
     })),
   );

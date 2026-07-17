@@ -119,9 +119,13 @@ export function LabelPicker({
     setActiveIndex(0);
   }, [query]);
 
+  // Autofocus the search only in the desktop popover (keyboard-first flow).
+  // On the bottom sheet, focusing would summon the on-screen keyboard right
+  // on top of the sheet — tapping a label directly is the primary flow there,
+  // and the search field is one tap away when wanted.
   useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
+    if (mode === 'popover') inputRef.current?.focus();
+  }, [mode]);
 
   // Keep the active option scrolled into view during arrow navigation.
   useEffect(() => {

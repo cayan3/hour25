@@ -11,7 +11,11 @@ import type { MergedEntry } from '../lib/merge';
 function surfaceWriteFailure(e: unknown): void {
   console.error('entry write failed', e);
   const detail = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
-  useDayStore.getState().setWriteError(detail);
+  const store = useDayStore.getState();
+  store.setWriteError(detail);
+  // The snackbar already claimed success for this action — retract it rather
+  // than show "Logged X … Undo" next to a banner saying the write was lost.
+  store.clearLastAction();
 }
 
 // Every single-slot change the day views can make, in one place: assign,
