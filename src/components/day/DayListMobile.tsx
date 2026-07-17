@@ -151,8 +151,8 @@ const SlotRow = forwardRef<HTMLButtonElement, SlotRowProps>(function SlotRow(
   return (
     <div ref={nowRowRef} className="relative flex items-stretch">
       {isNow && (
-        <span title="Now" className="absolute inset-y-0 left-0 z-[1] w-1.5">
-          <span aria-hidden="true" className="absolute inset-y-0 left-0 w-0.5 rounded bg-sky-500" />
+        <span title="Now" className="absolute inset-y-0 left-0 z-[1] w-2">
+          <span aria-hidden="true" className="absolute inset-y-0 left-0 w-1 rounded-r bg-sky-500" />
         </span>
       )}
       <button
@@ -167,7 +167,13 @@ const SlotRow = forwardRef<HTMLButtonElement, SlotRowProps>(function SlotRow(
           isOpen ? 'z-10 ring-2 ring-inset ring-sky-500' : ''
         } ${label ? '' : 'border-b border-slate-100 dark:border-slate-800'}`}
       >
-        <span className="flex w-14 shrink-0 items-center pl-3 tabular-nums text-slate-500 dark:text-slate-400">
+        <span
+          className={`flex w-14 shrink-0 items-center pl-3 tabular-nums ${
+            isNow
+              ? 'font-semibold text-sky-600 dark:text-sky-400'
+              : 'text-slate-500 dark:text-slate-400'
+          }`}
+        >
           {slotTimeShort(slotIndex)}
         </span>
         {entry ? (

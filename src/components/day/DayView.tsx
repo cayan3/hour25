@@ -41,6 +41,8 @@ export function DayView({ userId }: { userId: string }) {
   const openPicker = useDayStore((s) => s.openPicker);
   const showPicker = useDayStore((s) => s.showPicker);
   const closePicker = useDayStore((s) => s.closePicker);
+  const writeError = useDayStore((s) => s.writeError);
+  const setWriteError = useDayStore((s) => s.setWriteError);
 
   const merged = useDayEntries(userId, activeDate);
   const { data: activeLabels } = useActiveLabels(userId);
@@ -146,6 +148,29 @@ export function DayView({ userId }: { userId: string }) {
         {/* TODO (Week 5): Fill sleep button lives here — disabled with an
             inline hint when sleep_label_id is unset/soft-deleted. */}
       </div>
+
+      {writeError && (
+        <div
+          role="alert"
+          className="mx-3 mt-3 rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300 md:mx-0"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <p>
+              That change could not be saved — the browser refused the local write, so it was lost.
+              Refresh the page and try again.
+            </p>
+            <button
+              type="button"
+              onClick={() => setWriteError(null)}
+              aria-label="Dismiss error"
+              className="rounded px-1 focus-visible:ring-2 focus-visible:ring-offset-2"
+            >
+              ✕
+            </button>
+          </div>
+          <p className="mt-1 break-all text-xs opacity-80">{writeError}</p>
+        </div>
+      )}
 
       {hintSlot !== null && (
         <div className="mx-3 mt-3 flex items-start justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 md:mx-0">

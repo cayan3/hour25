@@ -40,11 +40,16 @@ interface DayState {
   activeDate: string;
   openPicker: OpenPicker | null;
   lastAction: LastAction | null;
+  // SPEC §7.1: the write path's one genuine failure mode is IndexedDB itself
+  // refusing the write (quota, private mode, iOS dropping the connection).
+  // When that happens the user MUST be told — the write was silently lost.
+  writeError: string | null;
   setActiveDate: (date: string) => void;
   showPicker: (slotIndex: number, anchor?: PickerAnchor | null) => void;
   closePicker: () => void;
   recordAction: (action: Omit<LastAction, 'id'>) => void;
   clearLastAction: () => void;
+  setWriteError: (writeError: string | null) => void;
 }
 
 let actionNonce = 0;
@@ -53,9 +58,11 @@ export const useDayStore = create<DayState>((set) => ({
   activeDate: localDateString(),
   openPicker: null,
   lastAction: null,
+  writeError: null,
   setActiveDate: (activeDate) => set({ activeDate, openPicker: null }),
   showPicker: (slotIndex, anchor = null) => set({ openPicker: { slotIndex, anchor } }),
   closePicker: () => set({ openPicker: null }),
   recordAction: (action) => set({ lastAction: { ...action, id: ++actionNonce } }),
   clearLastAction: () => set({ lastAction: null }),
+  setWriteError: (writeError) => set({ writeError }),
 }));

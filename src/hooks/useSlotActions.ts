@@ -4,6 +4,16 @@ import { recordLabelUse } from '../lib/mru';
 import { useDayStore, type SlotSnapshot } from '../store/day';
 import type { MergedEntry } from '../lib/merge';
 
+// SPEC §7.1: the write path has no network and no branches — the only way it
+// fails is IndexedDB itself refusing the write (quota, private mode, iOS
+// Safari dropping its IndexedDB connection after backgrounding). That loss
+// must be surfaced, never swallowed: the snackbar already said "Logged …".
+function surfaceWriteFailure(e: unknown): void {
+  console.error('entry write failed', e);
+  const detail = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+  useDayStore.getState().setWriteError(detail);
+}
+
 // Every single-slot change the day views can make, in one place: assign,
 // clear, and undo. All of them go through the normal write path (upsertEntry/
 // deleteEntry → Dexie queue) — the overlay makes them visible instantly, so
@@ -30,14 +40,14 @@ export function useSlotActions(
     // re-labeling a slot must not silently drop it).
     const assign = (slotIndex: number, labelId: string, note?: string | null): void => {
       const prev = snapshotOf(slotIndex);
-      void upsertEntry(userId, {
+      upsertEntry(userId, {
         date,
         slotIndex,
         op: 'upsert',
         labelId,
         note: note !== undefined ? note : (prev?.note ?? null),
         chunkMinutes: prev?.chunkMinutes,
-      });
+      }).catch(surfaceWriteFailure);
       recordLabelUse(userId, labelId);
       recordAction({ date, slotIndex, prev, description: `Logged ${labelNameById(labelId)}` });
     };
@@ -45,7 +55,7 @@ export function useSlotActions(
     const clear = (slotIndex: number): void => {
       const prev = snapshotOf(slotIndex);
       if (!prev) return; // clearing an empty slot is a no-op, not an action
-      void deleteEntry(userId, date, slotIndex);
+      deleteEntry(userId, date, slotIndex).catch(surfaceWriteFailure);
       recordAction({ date, slotIndex, prev, description: 'Cleared slot' });
     };
 
@@ -66,16 +76,16 @@ export function useUndo(userId: string) {
       if (!lastAction) return;
       const { date, slotIndex, prev } = lastAction;
       if (prev) {
-        void upsertEntry(userId, {
+        upsertEntry(userId, {
           date,
           slotIndex,
           op: 'upsert',
           labelId: prev.labelId,
           note: prev.note,
           chunkMinutes: prev.chunkMinutes,
-        });
+        }).catch(surfaceWriteFailure);
       } else {
-        void deleteEntry(userId, date, slotIndex);
+        deleteEntry(userId, date, slotIndex).catch(surfaceWriteFailure);
       }
       clearLastAction(); // single level: undoing an undo is not a thing
     },

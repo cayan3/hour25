@@ -125,8 +125,13 @@ function AuthenticatedShell({ userId, email }: { userId: string; email: string |
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-900 dark:text-slate-50">
-      <header className="flex items-center justify-between border-b border-slate-200 p-4 dark:border-slate-800">
+    // overflow-x-clip: nothing inside may widen the page past the viewport —
+    // an overflowing child would otherwise leave an unpainted strip beyond
+    // this div's background (found on a phone: the account email pushed the
+    // header wide and the right fifth of the page went white in dark mode).
+    // `clip` rather than `hidden` so position:sticky descendants keep working.
+    <div className="min-h-screen overflow-x-clip bg-slate-50 text-slate-900 dark:bg-slate-900 dark:text-slate-50">
+      <header className="flex items-center justify-between gap-2 border-b border-slate-200 p-4 dark:border-slate-800">
         <nav className="flex gap-1">
           {(['today', 'settings'] as const).map((tab) => (
             <button
@@ -144,8 +149,10 @@ function AuthenticatedShell({ userId, email }: { userId: string; email: string |
             </button>
           ))}
         </nav>
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-slate-500 dark:text-slate-400">{email}</span>
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="hidden max-w-56 truncate text-sm text-slate-500 dark:text-slate-400 sm:block">
+            {email}
+          </span>
           <ThemeToggle />
           <button
             type="button"
