@@ -7,6 +7,7 @@ import { DeletedLabelsPanel } from '../labels/DeletedLabelsPanel';
 import { CategoryCreateForm } from '../categories/CategoryCreateForm';
 import { CategoryList } from '../categories/CategoryList';
 import { SleepWindowForm } from './SleepWindowForm';
+import { SetAsidePanel } from '../sync/SetAsidePanel';
 
 export function SettingsView({ userId }: { userId: string }) {
   const activeLabels = useActiveLabels(userId);
@@ -62,6 +63,13 @@ export function SettingsView({ userId }: { userId: string }) {
         <h2 className="text-lg font-medium text-slate-900 dark:text-slate-50">Deleted labels</h2>
         <div className="mt-3">
           <DeletedLabelsPanel userId={userId} allLabels={allLabels.data ?? []} />
+        </div>
+      </section>
+
+      <section>
+        <h2 className="text-lg font-medium text-slate-900 dark:text-slate-50">Set-aside entries</h2>
+        <div className="mt-3">
+          <SetAsidePanel userId={userId} />
         </div>
       </section>
     </div>

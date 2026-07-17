@@ -17,9 +17,31 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react()],
     server: { allowedHosts },
+    // Two test projects: lib/queue tests stay in the fast node environment;
+    // component tests (tests/components/ only) run under jsdom with Testing
+    // Library. Both need fake-indexeddb (Dexie in Node/jsdom).
     test: {
-      environment: 'node',
-      setupFiles: ['./tests/setup.ts'],
+      projects: [
+        {
+          extends: true,
+          test: {
+            name: 'unit',
+            environment: 'node',
+            include: ['tests/**/*.test.ts'],
+            exclude: ['tests/components/**'],
+            setupFiles: ['./tests/setup.ts'],
+          },
+        },
+        {
+          extends: true,
+          test: {
+            name: 'components',
+            environment: 'jsdom',
+            include: ['tests/components/**/*.test.tsx'],
+            setupFiles: ['./tests/setup.ts', './tests/components/setup.ts'],
+          },
+        },
+      ],
     },
   };
 });

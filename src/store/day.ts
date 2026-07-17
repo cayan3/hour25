@@ -34,6 +34,9 @@ export interface PickerAnchor {
 interface OpenPicker {
   slotIndex: number;
   anchor: PickerAnchor | null;
+  // `n` on a filled cell opens the picker with focus in the note field
+  // (DESIGN §2) — same component, different landing spot.
+  focusNote: boolean;
 }
 
 interface DayState {
@@ -45,7 +48,7 @@ interface DayState {
   // When that happens the user MUST be told — the write was silently lost.
   writeError: string | null;
   setActiveDate: (date: string) => void;
-  showPicker: (slotIndex: number, anchor?: PickerAnchor | null) => void;
+  showPicker: (slotIndex: number, anchor?: PickerAnchor | null, focusNote?: boolean) => void;
   closePicker: () => void;
   recordAction: (action: Omit<LastAction, 'id'>) => void;
   clearLastAction: () => void;
@@ -60,7 +63,8 @@ export const useDayStore = create<DayState>((set) => ({
   lastAction: null,
   writeError: null,
   setActiveDate: (activeDate) => set({ activeDate, openPicker: null }),
-  showPicker: (slotIndex, anchor = null) => set({ openPicker: { slotIndex, anchor } }),
+  showPicker: (slotIndex, anchor = null, focusNote = false) =>
+    set({ openPicker: { slotIndex, anchor, focusNote } }),
   closePicker: () => set({ openPicker: null }),
   recordAction: (action) => set({ lastAction: { ...action, id: ++actionNonce } }),
   clearLastAction: () => set({ lastAction: null }),

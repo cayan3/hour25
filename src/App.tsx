@@ -7,6 +7,9 @@ import { initOfflineSync } from './lib/offline/sync';
 import { queryClient } from './lib/queryClient';
 import { SignInView } from './components/SignInView';
 import { ThemeToggle } from './components/ThemeToggle';
+import { SyncChip } from './components/sync/SyncChip';
+import { AuthBanner } from './components/sync/AuthBanner';
+import { DeadLetterToast } from './components/sync/DeadLetterToast';
 import { DayView } from './components/day/DayView';
 import { SettingsView } from './components/settings/SettingsView';
 import { OnboardingWizard } from './components/onboarding/OnboardingWizard';
@@ -153,6 +156,7 @@ function AuthenticatedShell({ userId, email }: { userId: string; email: string |
           <span className="hidden max-w-56 truncate text-sm text-slate-500 dark:text-slate-400 sm:block">
             {email}
           </span>
+          <SyncChip userId={userId} />
           <ThemeToggle />
           <button
             type="button"
@@ -163,7 +167,13 @@ function AuthenticatedShell({ userId, email }: { userId: string; email: string |
           </button>
         </div>
       </header>
-      {view === 'today' ? <DayView userId={userId} /> : <SettingsView userId={userId} />}
+      <AuthBanner userId={userId} />
+      {view === 'today' ? (
+        <DayView userId={userId} onOpenSettings={() => setView('settings')} />
+      ) : (
+        <SettingsView userId={userId} />
+      )}
+      <DeadLetterToast onOpenSettings={() => setView('settings')} />
     </div>
   );
 }

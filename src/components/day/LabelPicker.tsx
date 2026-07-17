@@ -8,22 +8,25 @@ import { loadMru, MRU_DISPLAY_LIMIT } from '../../lib/mru';
 // One combobox component, rendered as an anchored popover (desktop) or a
 // bottom sheet (mobile) — DESIGN §4. Structure: search input → Recent (≤9,
 // number keys) → divider → full active list alphabetical grouped by category
-// → Clear slot truly pinned in a footer below the scrolling list (only when
-// the slot has an entry), so a long label list never hides it.
-//
-// TODO (Week 5, notes): the note textarea lives below this list — saved with
-// the label choice or as an update to the slot's existing entry. Not built
-// yet; nothing can write notes until then.
+// → note textarea + Clear slot truly pinned in a footer below the scrolling
+// list (only when the slot has an entry), so a long label list never hides
+// them. Notes: the textarea is hidden for empty slots (a note cannot exist
+// without a labeled entry); a changed note is saved with the label choice, or
+// alone via Save note as an update to the slot's existing entry.
 
 interface LabelPickerProps {
   userId: string;
   slotIndex: number;
   hasEntry: boolean;
+  initialNote: string | null; // the slot's existing note, if any
+  autofocusNote: boolean; // `n` key: land in the note field, not the search
   mode: 'popover' | 'sheet';
   anchor: PickerAnchor | null;
   labels: LabelRow[]; // active only — soft-deleted labels never appear here
   categories: CategoryRow[];
-  onSelect: (labelId: string) => void;
+  // note undefined = unchanged (keep the slot's existing note)
+  onSelect: (labelId: string, note?: string | null) => void;
+  onSaveNote: (note: string | null) => void; // note-only update, label unchanged
   onClear: () => void;
   onClose: () => void;
 }
@@ -68,18 +71,33 @@ export function LabelPicker({
   userId,
   slotIndex,
   hasEntry,
+  initialNote,
+  autofocusNote,
   mode,
   anchor,
   labels,
   categories,
   onSelect,
+  onSaveNote,
   onClear,
   onClose,
 }: LabelPickerProps) {
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
+  const [note, setNote] = useState(initialNote ?? '');
   const inputRef = useRef<HTMLInputElement>(null);
+  const noteRef = useRef<HTMLTextAreaElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
+
+  // A whitespace-only note is no note. Only a *changed* note rides along with
+  // a label selection — unchanged passes undefined so re-selecting the same
+  // label stays a true no-op (useSlotActions guards on it).
+  const noteValue = note.trim() === '' ? null : note;
+  const noteChanged = noteValue !== (initialNote ?? null);
+
+  function selectLabel(labelId: string): void {
+    onSelect(labelId, noteChanged ? noteValue : undefined);
+  }
 
   // C-42: the Recent list is snapshotted when the picker opens (empty deps =
   // once per mount; the picker mounts fresh on every open). It never reorders
@@ -145,10 +163,12 @@ export function LabelPicker({
   // Autofocus the search only in the desktop popover (keyboard-first flow).
   // On the bottom sheet, focusing would summon the on-screen keyboard right
   // on top of the sheet — tapping a label directly is the primary flow there,
-  // and the search field is one tap away when wanted.
+  // and the search field is one tap away when wanted. The `n` key lands in
+  // the note field instead (both modes — pressing `n` was a keyboard action).
   useEffect(() => {
-    if (mode === 'popover') inputRef.current?.focus();
-  }, [mode]);
+    if (autofocusNote) noteRef.current?.focus();
+    else if (mode === 'popover') inputRef.current?.focus();
+  }, [mode, autofocusNote]);
 
   // Keep the active option scrolled into view during arrow navigation.
   useEffect(() => {
@@ -173,7 +193,7 @@ export function LabelPicker({
     if (e.key === 'Enter') {
       e.preventDefault();
       const option = flatOptions[activeIndex];
-      if (option) onSelect(option.label.id);
+      if (option) selectLabel(option.label.id);
       return;
     }
     // Delete clears the slot while the search is empty — matches the grid's
@@ -192,7 +212,7 @@ export function LabelPicker({
       const recent = recents[Number(e.key) - 1];
       if (recent) {
         e.preventDefault();
-        onSelect(recent.id);
+        selectLabel(recent.id);
       }
     }
   }
@@ -281,7 +301,7 @@ export function LabelPicker({
                         active ? 'bg-slate-100 dark:bg-slate-700' : ''
                       }`}
                       onMouseEnter={() => setActiveIndex(index)}
-                      onClick={() => onSelect(option.label.id)}
+                      onClick={() => selectLabel(option.label.id)}
                     >
                       <span
                         aria-hidden="true"
@@ -302,10 +322,38 @@ export function LabelPicker({
           ))}
         </ul>
         {hasEntry && (
+          <div className="mt-1 shrink-0 border-t border-slate-200 px-1 pt-2 dark:border-slate-700">
+            <textarea
+              ref={noteRef}
+              rows={2}
+              aria-label="Note for this slot"
+              placeholder="Add a note…"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              // Keys typed here are text, not picker commands (digits must not
+              // select Recents, Delete must not clear the slot, Enter is a
+              // newline) — only Escape bubbles up to close the picker.
+              onKeyDown={(e) => {
+                if (e.key !== 'Escape') e.stopPropagation();
+              }}
+              className="w-full resize-none rounded border border-slate-300 px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 dark:border-slate-600 dark:bg-slate-900"
+            />
+            {noteChanged && (
+              <button
+                type="button"
+                onClick={() => onSaveNote(noteValue)}
+                className="mt-1 flex min-h-11 w-full touch-manipulation items-center justify-center rounded bg-sky-600 px-3 py-2 text-sm font-medium text-white focus-visible:ring-2 focus-visible:ring-offset-2 hover:bg-sky-700"
+              >
+                Save note
+              </button>
+            )}
+          </div>
+        )}
+        {hasEntry && (
           <button
             type="button"
             onClick={onClear}
-            className="mt-1 flex min-h-11 w-full shrink-0 touch-manipulation items-center rounded-b border-t border-slate-200 px-3 py-2 text-left text-sm text-slate-600 focus-visible:ring-2 focus-visible:ring-offset-2 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700"
+            className="flex min-h-11 w-full shrink-0 touch-manipulation items-center rounded-b px-3 py-2 text-left text-sm text-slate-600 focus-visible:ring-2 focus-visible:ring-offset-2 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700"
           >
             Clear slot
           </button>

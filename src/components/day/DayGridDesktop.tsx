@@ -25,7 +25,7 @@ interface DayGridDesktopProps {
   labelById: Map<string, LabelRow>;
   nowSlot: number | null; // today's current slot, else null
   hintSlot: number | null; // first empty slot, highlighted while the hint is up
-  onOpenPicker: (slotIndex: number, anchor: PickerAnchor) => void;
+  onOpenPicker: (slotIndex: number, anchor: PickerAnchor, focusNote?: boolean) => void;
   onAssignLast: (slotIndex: number) => void; // Shift+Enter (DESIGN §2)
   onClear: (slotIndex: number) => void; // Delete/Backspace (C-30)
   openSlotIndex: number | null; // which cell's picker is open — gets a visible ring
@@ -66,14 +66,18 @@ export function DayGridDesktop({
     cellRefs.current[clamped]?.focus();
   }
 
-  function openPickerAt(slotIndex: number): void {
+  function openPickerAt(slotIndex: number, focusNote = false): void {
     const rect = cellRefs.current[slotIndex]?.getBoundingClientRect();
-    onOpenPicker(slotIndex, {
-      top: rect?.top ?? 0,
-      left: rect?.left ?? 0,
-      bottom: rect?.bottom ?? 0,
-      width: rect?.width ?? 0,
-    });
+    onOpenPicker(
+      slotIndex,
+      {
+        top: rect?.top ?? 0,
+        left: rect?.left ?? 0,
+        bottom: rect?.bottom ?? 0,
+        width: rect?.width ?? 0,
+      },
+      focusNote,
+    );
   }
 
   function handleKeyDown(e: React.KeyboardEvent): void {
@@ -106,7 +110,14 @@ export function DayGridDesktop({
         e.preventDefault();
         onClear(focusedSlot);
         break;
-      // TODO (Week 5, notes): `n` opens the note popover for the focused slot.
+      case 'n':
+        // Note popover (DESIGN §2): the picker with focus landing in the note
+        // field. Filled slots only — a note cannot exist without an entry.
+        if (entryBySlot.has(focusedSlot)) {
+          e.preventDefault();
+          openPickerAt(focusedSlot, true);
+        }
+        break;
       default:
         break;
     }

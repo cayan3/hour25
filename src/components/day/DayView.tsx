@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useDayEntries } from '../../hooks/useDayEntries';
 import { useActiveLabels, useAllLabels } from '../../hooks/useLabels';
 import { useCategories } from '../../hooks/useCategories';
-import { useSlotActions } from '../../hooks/useSlotActions';
+import { useFillSleep, useSlotActions } from '../../hooks/useSlotActions';
 import { useIsDesktop } from '../../hooks/useMediaQuery';
 import { useDayStore } from '../../store/day';
 import { localDateString, parseLocalDate } from '../../lib/time';
@@ -34,7 +34,7 @@ function useNowSlot(date: string): number | null {
 
 // Phase 1 day page: single day + prev/next/today navigation (DESIGN §2);
 // week strip and month heatmap are Phase 2 read surfaces.
-export function DayView({ userId }: { userId: string }) {
+export function DayView({ userId, onOpenSettings }: { userId: string; onOpenSettings: () => void }) {
   const isDesktop = useIsDesktop();
   const activeDate = useDayStore((s) => s.activeDate);
   const setActiveDate = useDayStore((s) => s.setActiveDate);
@@ -55,6 +55,7 @@ export function DayView({ userId }: { userId: string }) {
     [labelById],
   );
   const { assign, clear } = useSlotActions(userId, activeDate, merged, labelNameById);
+  const fillSleep = useFillSleep(userId, activeDate, merged);
 
   const nowSlot = useNowSlot(activeDate);
   const today = localDateString();
@@ -79,8 +80,8 @@ export function DayView({ userId }: { userId: string }) {
   }, [entryBySlot]);
   const hintSlot = !hintDismissed && isToday ? firstEmptySlot : null;
 
-  function assignAndClose(slotIndex: number, labelId: string): void {
-    assign(slotIndex, labelId);
+  function assignAndClose(slotIndex: number, labelId: string, note?: string | null): void {
+    assign(slotIndex, labelId, note);
     dismissHint();
     closePicker();
   }
@@ -136,18 +137,46 @@ export function DayView({ userId }: { userId: string }) {
             {isToday && <span className="ml-1.5 text-xs text-slate-500 dark:text-slate-400">Today</span>}
           </h1>
         </div>
-        {!isToday && (
+        <div className="flex items-center gap-1">
+          {!isToday && (
+            <button
+              type="button"
+              onClick={() => setActiveDate(today)}
+              className="min-h-11 touch-manipulation rounded px-3 text-sm text-sky-600 focus-visible:ring-2 focus-visible:ring-offset-2 dark:text-sky-400"
+            >
+              Today
+            </button>
+          )}
+          {/* DESIGN §5: fills only the sleep window with the sleep label,
+              skipping filled slots; disabled with the Settings hint below
+              when the sleep label is unset or soft-deleted. */}
           <button
             type="button"
-            onClick={() => setActiveDate(today)}
-            className="min-h-11 touch-manipulation rounded px-3 text-sm text-sky-600 focus-visible:ring-2 focus-visible:ring-offset-2 dark:text-sky-400"
+            disabled={fillSleep.state !== 'ready'}
+            aria-describedby={fillSleep.state === 'unset' ? 'fill-sleep-hint' : undefined}
+            onClick={() => {
+              fillSleep.fill();
+              dismissHint();
+            }}
+            className="min-h-11 touch-manipulation rounded px-3 text-sm text-slate-600 focus-visible:ring-2 focus-visible:ring-offset-2 enabled:hover:bg-slate-200 disabled:text-slate-400 dark:text-slate-300 dark:enabled:hover:bg-slate-800 dark:disabled:text-slate-600"
           >
-            Today
+            Fill sleep
           </button>
-        )}
-        {/* TODO (Week 5): Fill sleep button lives here — disabled with an
-            inline hint when sleep_label_id is unset/soft-deleted. */}
+        </div>
       </div>
+
+      {fillSleep.state === 'unset' && (
+        <p id="fill-sleep-hint" className="mx-3 mt-2 text-xs text-slate-500 dark:text-slate-400 md:mx-0">
+          <button
+            type="button"
+            onClick={onOpenSettings}
+            className="rounded underline focus-visible:ring-2 focus-visible:ring-offset-2"
+          >
+            Set a sleep label in Settings
+          </button>{' '}
+          to enable Fill sleep.
+        </p>
+      )}
 
       {writeError && (
         <div
@@ -197,7 +226,7 @@ export function DayView({ userId }: { userId: string }) {
             labelById={labelById}
             nowSlot={nowSlot}
             hintSlot={hintSlot}
-            onOpenPicker={(slotIndex, anchor) => showPicker(slotIndex, anchor)}
+            onOpenPicker={(slotIndex, anchor, focusNote) => showPicker(slotIndex, anchor, focusNote)}
             onAssignLast={assignLastUsed}
             onClear={clearSlot}
             openSlotIndex={openPicker?.slotIndex ?? null}
@@ -229,11 +258,18 @@ export function DayView({ userId }: { userId: string }) {
           userId={userId}
           slotIndex={openPicker.slotIndex}
           hasEntry={pickerEntry !== null}
+          initialNote={pickerEntry?.note ?? null}
+          autofocusNote={openPicker.focusNote}
           mode={isDesktop ? 'popover' : 'sheet'}
           anchor={openPicker.anchor}
           labels={activeLabels ?? []}
           categories={categories ?? []}
-          onSelect={(labelId) => assignAndClose(openPicker.slotIndex, labelId)}
+          onSelect={(labelId, note) => assignAndClose(openPicker.slotIndex, labelId, note)}
+          onSaveNote={(note) => {
+            // Note-only update: same label, new note, through the normal
+            // assign path (which records it as "Updated note" for undo).
+            if (pickerEntry) assignAndClose(openPicker.slotIndex, pickerEntry.labelId, note);
+          }}
           onClear={() => clearSlot(openPicker.slotIndex)}
           onClose={closePicker}
         />

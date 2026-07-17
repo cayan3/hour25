@@ -1,7 +1,10 @@
 import { useMemo } from 'react';
-import { upsertEntry, deleteEntry } from '../lib/db/entries';
+import { upsertEntry, upsertEntries, deleteEntry } from '../lib/db/entries';
+import { buildSleepFill } from '../lib/fillsleep';
 import { recordLabelUse } from '../lib/mru';
 import { useDayStore, type SlotSnapshot } from '../store/day';
+import { useSettings } from './useSettings';
+import { useAllLabels } from './useLabels';
 import type { MergedEntry } from '../lib/merge';
 
 // SPEC §7.1: the write path has no network and no branches — the only way it
@@ -44,9 +47,10 @@ export function useSlotActions(
     // re-labeling a slot must not silently drop it).
     const assign = (slotIndex: number, labelId: string, note?: string | null): void => {
       const prev = snapshotOf(slotIndex);
-      // Re-selecting the label a slot already has (with no note change) is a
+      // Re-selecting the label a slot already has with no note change is a
       // no-op: nothing to write, no "Logged X" snackbar claim, no undo entry.
-      if (prev && prev.labelId === labelId && note === undefined) return;
+      const sameLabel = prev !== null && prev.labelId === labelId;
+      if (sameLabel && (note === undefined || note === prev.note)) return;
       upsertEntry(userId, {
         date,
         slotIndex,
@@ -56,7 +60,14 @@ export function useSlotActions(
         chunkMinutes: prev?.chunkMinutes,
       }).catch(surfaceWriteFailure);
       recordLabelUse(userId, labelId);
-      recordAction({ date, slotIndex, prev, description: `Logged ${labelNameById(labelId)}` });
+      recordAction({
+        date,
+        slotIndex,
+        prev,
+        // A same-label write only happens for a note change (guarded above) —
+        // claiming "Logged X" for it would misdescribe the action.
+        description: sameLabel ? 'Updated note' : `Logged ${labelNameById(labelId)}`,
+      });
     };
 
     const clear = (slotIndex: number): void => {
@@ -68,6 +79,43 @@ export function useSlotActions(
 
     return { assign, clear };
   }, [userId, date, merged, labelNameById, recordAction]);
+}
+
+// Fill sleep (SPEC §8 / DESIGN §5): 'ready' iff the sleep label is set and
+// still active — unset or soft-deleted renders the button disabled with the
+// Settings hint; 'loading' keeps the hint from flashing while settings/labels
+// are still in flight. fill() computes the filled set from MERGED state so it
+// works identically offline, and is non-destructive (buildSleepFill skips
+// filled slots). A batch write, so it records no single-slot undo action.
+export type FillSleepState = 'loading' | 'unset' | 'ready';
+
+export function useFillSleep(userId: string, date: string, merged: MergedEntry[]) {
+  const { data: settings } = useSettings(userId);
+  const { data: allLabels } = useAllLabels(userId);
+
+  let state: FillSleepState;
+  if (settings === undefined || allLabels === undefined) {
+    state = 'loading';
+  } else {
+    const sleepLabel = allLabels.find((l) => l.id === settings?.sleep_label_id);
+    state = sleepLabel && sleepLabel.deleted_at === null ? 'ready' : 'unset';
+  }
+
+  return useMemo(() => {
+    const fill = (): void => {
+      if (state !== 'ready' || !settings?.sleep_label_id) return;
+      const filled = new Set(merged.map((e) => e.slotIndex));
+      const writes = buildSleepFill(
+        date,
+        settings.sleep_label_id,
+        settings.sleep_start,
+        settings.sleep_end,
+        filled,
+      );
+      if (writes.length) upsertEntries(userId, writes).catch(surfaceWriteFailure);
+    };
+    return { state, fill };
+  }, [userId, date, merged, state, settings]);
 }
 
 // Undo lives outside useSlotActions because it must apply to lastAction's own
