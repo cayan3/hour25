@@ -89,6 +89,11 @@ export function DayListMobile({
         const entry = entryBySlot.get(slotIndex) ?? null;
         const prevEntry = slotIndex > 0 ? (entryBySlot.get(slotIndex - 1) ?? null) : null;
         const chip = !entry && prevEntry ? (labelById.get(prevEntry.labelId) ?? null) : null;
+        // Visual run merging, vertical form (C-41): consecutive same-label
+        // rows connect into one apparent block; the name paints once on the
+        // topmost row. Every row keeps its own button + accessible name.
+        const prevSame = entry !== null && prevEntry?.labelId === entry.labelId;
+        const nextSame = entry !== null && entryBySlot.get(slotIndex + 1)?.labelId === entry.labelId;
         return (
           <SlotRow
             key={slotIndex}
@@ -98,6 +103,8 @@ export function DayListMobile({
             slotIndex={slotIndex}
             entry={entry}
             label={entry ? (labelById.get(entry.labelId) ?? null) : null}
+            runStart={!prevSame}
+            runEnd={!nextSame}
             isNow={slotIndex === nowSlot}
             isHint={slotIndex === hintSlot}
             isOpen={slotIndex === openSlotIndex}
@@ -122,6 +129,8 @@ interface SlotRowProps {
   slotIndex: number;
   entry: MergedEntry | null;
   label: LabelRow | null;
+  runStart: boolean; // first row of a same-label run (paints the name)
+  runEnd: boolean; // last row of a same-label run
   isNow: boolean;
   isHint: boolean;
   isOpen: boolean; // this row's picker is open
@@ -134,7 +143,22 @@ interface SlotRowProps {
 }
 
 const SlotRow = forwardRef<HTMLButtonElement, SlotRowProps>(function SlotRow(
-  { slotIndex, entry, label, isNow, isHint, isOpen, nowRowRef, chip, tabIndex, onFocus, onOpen, onAssignSame },
+  {
+    slotIndex,
+    entry,
+    label,
+    runStart,
+    runEnd,
+    isNow,
+    isHint,
+    isOpen,
+    nowRowRef,
+    chip,
+    tabIndex,
+    onFocus,
+    onOpen,
+    onAssignSame,
+  },
   ref,
 ) {
   const accessibleName = slotAccessibleName(
@@ -163,12 +187,12 @@ const SlotRow = forwardRef<HTMLButtonElement, SlotRowProps>(function SlotRow(
         tabIndex={tabIndex}
         onFocus={onFocus}
         onClick={onOpen}
-        className={`flex min-h-11 w-full touch-manipulation items-stretch text-left text-sm ring-offset-slate-50 focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-offset-2 motion-safe:transition-colors motion-safe:duration-100 dark:ring-offset-slate-900 ${
+        className={`flex min-h-11 w-full touch-manipulation items-stretch text-left text-sm ring-offset-slate-50 focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-offset-2 motion-safe:transition-[background-color] motion-safe:duration-100 dark:ring-offset-slate-900 ${
           isOpen ? 'z-10 ring-2 ring-inset ring-sky-500' : ''
         } ${label ? '' : 'border-b border-slate-100 dark:border-slate-800'}`}
       >
         <span
-          className={`flex w-14 shrink-0 items-center pl-3 tabular-nums ${
+          className={`flex w-16 shrink-0 items-center tabular-nums ${
             isNow
               ? 'font-semibold text-sky-600 dark:text-sky-400'
               : 'text-slate-500 dark:text-slate-400'
@@ -178,15 +202,19 @@ const SlotRow = forwardRef<HTMLButtonElement, SlotRowProps>(function SlotRow(
         </span>
         {entry ? (
           <span
-            className="my-0.5 flex min-w-0 flex-1 items-center justify-end gap-2 rounded px-3"
+            className={`flex min-w-0 flex-1 items-center justify-end gap-2 px-3 ${
+              runStart ? 'mt-0.5 rounded-t' : ''
+            } ${runEnd ? 'mb-0.5 rounded-b' : ''}`}
             style={label ? { backgroundColor: label.color, color: fg } : undefined}
           >
             {entry.note && fg && (
               <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: fg }} />
             )}
-            <span className={`truncate font-medium ${label?.deleted_at ? 'line-through' : ''}`}>
-              {label?.name ?? 'Unknown label'}
-            </span>
+            {runStart && (
+              <span className={`truncate font-medium ${label?.deleted_at ? 'line-through' : ''}`}>
+                {label?.name ?? 'Unknown label'}
+              </span>
+            )}
           </span>
         ) : (
           <span className={`flex flex-1 items-center py-1.5 ${chip ? 'mr-36' : ''}`}>

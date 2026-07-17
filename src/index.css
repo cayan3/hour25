@@ -1,3 +1,17 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* The page root must carry the theme background itself: anywhere the app's
+   containers end (overscroll bounce, safe-area strips, content shorter than
+   the visual viewport on phones) the browser paints the html background —
+   which defaults to white and showed as a white strip in dark mode. Colors
+   match the theme-color meta constants in src/store/theme.ts. */
+@layer base {
+  html {
+    background-color: #f8fafc;
+  }
+  html.dark {
+    background-color: #0f172a;
+  }
+}

@@ -193,7 +193,7 @@ const SlotCell = forwardRef<HTMLButtonElement, SlotCellProps>(function SlotCell(
       tabIndex={tabIndex}
       onFocus={onFocus}
       onClick={onClick}
-      className={`relative h-10 touch-manipulation rounded ring-offset-slate-50 focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-offset-2 motion-safe:transition-colors motion-safe:duration-100 dark:ring-offset-slate-900 ${
+      className={`relative h-10 touch-manipulation rounded ring-offset-slate-50 focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-offset-2 motion-safe:transition-[background-color] motion-safe:duration-100 dark:ring-offset-slate-900 ${
         isOpen ? 'z-10 ring-2 ring-sky-500 ring-offset-1' : ''
       } ${
         filled

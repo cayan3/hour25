@@ -44,6 +44,9 @@ export function useSlotActions(
     // re-labeling a slot must not silently drop it).
     const assign = (slotIndex: number, labelId: string, note?: string | null): void => {
       const prev = snapshotOf(slotIndex);
+      // Re-selecting the label a slot already has (with no note change) is a
+      // no-op: nothing to write, no "Logged X" snackbar claim, no undo entry.
+      if (prev && prev.labelId === labelId && note === undefined) return;
       upsertEntry(userId, {
         date,
         slotIndex,
