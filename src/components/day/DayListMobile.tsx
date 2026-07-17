@@ -191,8 +191,11 @@ const SlotRow = forwardRef<HTMLButtonElement, SlotRowProps>(function SlotRow(
           isOpen ? 'z-10 ring-2 ring-inset ring-sky-500' : ''
         } ${label ? '' : 'border-b border-slate-100 dark:border-slate-800'}`}
       >
+        {/* Right-aligned with a fixed pr: the gap to the slot block is
+            identical for "x:xx" and "xx:xx", and the text clears the now bar
+            at the row's left edge. */}
         <span
-          className={`flex w-16 shrink-0 items-center tabular-nums ${
+          className={`flex w-16 shrink-0 items-center justify-end pr-3 tabular-nums ${
             isNow
               ? 'font-semibold text-sky-600 dark:text-sky-400'
               : 'text-slate-500 dark:text-slate-400'
