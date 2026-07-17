@@ -25,17 +25,25 @@ function queuedRow(slotIndex: number) {
 }
 
 beforeEach(async () => {
+  localStorage.clear();
   await offlineDB.writes.clear();
   await offlineDB.dead.clear();
-  useQueueStatusStore.setState({ status: 'idle', deadCount: 0 });
+  useQueueStatusStore.setState({ status: 'idle', deadCount: 0, lastSyncedAt: null });
 });
 
 describe('SyncChip', () => {
-  it('is hidden while the queue is empty', async () => {
+  it('shows the quiet synced state while the queue is empty', async () => {
     render(<SyncChip userId={USER} />);
-    // The polite live region is always mounted; the visible chip is not.
-    expect(await screen.findByRole('status')).toHaveProperty('textContent', '');
+    // Always visible (no popping in/out); no last-sync known yet, no count.
+    expect(await screen.findByTitle('All entries synced')).toBeTruthy();
     expect(screen.queryByTitle(/pending sync/)).toBeNull();
+    expect(screen.getByRole('status')).toHaveProperty('textContent', '');
+  });
+
+  it('shows the last-synced time once one is known', async () => {
+    useQueueStatusStore.setState({ lastSyncedAt: Date.now() });
+    render(<SyncChip userId={USER} />);
+    expect(await screen.findByTitle(/All entries synced — last sync /)).toBeTruthy();
   });
 
   it('shows the pending count and announces entering the pending state', async () => {
@@ -49,16 +57,18 @@ describe('SyncChip', () => {
   it('ignores other users’ queued rows', async () => {
     await offlineDB.writes.put({ ...queuedRow(1), userId: 'someone-else' });
     render(<SyncChip userId={USER} />);
-    await waitFor(() => expect(screen.queryByTitle(/pending sync/)).toBeNull());
+    await screen.findByTitle('All entries synced');
+    expect(screen.queryByTitle(/pending sync/)).toBeNull();
   });
 
-  it('hides and announces "All entries synced" when the queue drains', async () => {
+  it('returns to the synced state and announces it when the queue drains', async () => {
     await offlineDB.writes.put(queuedRow(1));
     render(<SyncChip userId={USER} />);
     await screen.findByTitle('1 entry pending sync (waiting to sync)');
 
     await offlineDB.writes.clear();
     await waitFor(() => expect(screen.queryByTitle(/pending sync/)).toBeNull());
+    expect(screen.getByTitle(/All entries synced/)).toBeTruthy();
     expect(screen.getByRole('status').textContent).toBe('All entries synced');
   });
 

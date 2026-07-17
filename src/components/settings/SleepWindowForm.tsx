@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { sleepWindowSchema } from '../../lib/schemas';
 import { slotIndexToLocalTime } from '../../lib/time';
 import { SLOTS_PER_DAY } from '../../lib/constants';
@@ -30,6 +30,13 @@ export function SleepWindowForm({
   const [sleepEnd, setSleepEnd] = useState(initialSleepEnd);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // Transient "Saved" confirmation (Week 5 feedback: the form saved silently).
+  const [savedNonce, setSavedNonce] = useState(0);
+  useEffect(() => {
+    if (savedNonce === 0) return;
+    const timer = setTimeout(() => setSavedNonce(0), 2_500);
+    return () => clearTimeout(timer);
+  }, [savedNonce]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -42,6 +49,7 @@ export function SleepWindowForm({
     setSaving(true);
     try {
       await onSave(parsed.data);
+      setSavedNonce((n) => n + 1);
     } catch (e) {
       setError(toFriendlyErrorMessage(e));
     } finally {
@@ -106,13 +114,18 @@ export function SleepWindowForm({
         </div>
       </div>
       {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
-      <button
-        type="submit"
-        disabled={saving}
-        className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white focus-visible:ring-2 focus-visible:ring-offset-2 disabled:opacity-50 dark:bg-slate-50 dark:text-slate-900"
-      >
-        {submitLabel}
-      </button>
+      <div className="flex items-center gap-3">
+        <button
+          type="submit"
+          disabled={saving}
+          className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white focus-visible:ring-2 focus-visible:ring-offset-2 disabled:opacity-50 dark:bg-slate-50 dark:text-slate-900"
+        >
+          {submitLabel}
+        </button>
+        <span role="status" className="text-sm text-emerald-600 dark:text-emerald-400">
+          {savedNonce > 0 && 'Saved'}
+        </span>
+      </div>
     </form>
   );
 }

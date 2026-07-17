@@ -81,6 +81,11 @@ export function DayGridDesktop({
   }
 
   function handleKeyDown(e: React.KeyboardEvent): void {
+    // While the picker is open it owns the keyboard — grid keys reaching here
+    // (e.g. after tabbing out of the popover) moved the focus ring while the
+    // open picker stayed bound to the clicked slot, which read as edits
+    // landing on the wrong cell (Week 5 feedback).
+    if (pickerOpen) return;
     switch (e.key) {
       case 'ArrowRight':
         e.preventDefault();
@@ -200,7 +205,13 @@ const SlotCell = forwardRef<HTMLButtonElement, SlotCellProps>(function SlotCell(
       type="button"
       role="gridcell"
       aria-label={accessibleName}
-      title={label ? `${label.name}${label.deleted_at !== null ? ' (deleted)' : ''}` : undefined}
+      title={
+        label
+          ? `${label.name}${label.deleted_at !== null ? ' (deleted)' : ''}${
+              entry?.note ? ` — ${entry.note}` : ''
+            }`
+          : undefined
+      }
       tabIndex={tabIndex}
       onFocus={onFocus}
       onClick={onClick}

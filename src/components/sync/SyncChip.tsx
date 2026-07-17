@@ -1,21 +1,33 @@
 import { useEffect, useRef, useState } from 'react';
 import { usePendingCount } from '../../hooks/useSync';
 import { useQueueStatusStore } from '../../store/queueStatus';
+import { loadLastSync } from '../../lib/lastSync';
+import { localDateString } from '../../lib/time';
 
-// DESIGN §7: a small persistent chip (icon + count) while the queue is
-// non-empty; hidden at zero. States from queueStatus: syncing (subtle
-// spinner), offline (cloud-off), auth (key — the banner carries the action).
-// The always-mounted polite live region announces the transitions
-// ("3 entries pending sync" → "All entries synced") — it must outlive the
-// visible chip or the "synced" announcement would never be read.
+// DESIGN §7 (revised per Week 5 feedback): the chip is always visible so it
+// never pops in and out of the header. Zero pending = a quiet "synced" state
+// (check icon + last-synced time); non-empty queue = count + state icon from
+// queueStatus: syncing (subtle spinner), offline (cloud-off), auth (key — the
+// banner carries the action). The always-mounted polite live region announces
+// the transitions ("3 entries pending sync" → "All entries synced").
 
 function entriesWord(n: number): string {
   return n === 1 ? 'entry' : 'entries';
 }
 
+// "10:43" for a same-day sync, "Jul 16, 10:43" otherwise. Display-only UI
+// formatting — the C-45 no-locale rule is about stored dates, not chrome.
+function formatSyncTime(ts: number): string {
+  const d = new Date(ts);
+  const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  if (localDateString(d) === localDateString()) return time;
+  return `${d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}, ${time}`;
+}
+
 export function SyncChip({ userId }: { userId: string }) {
   const pending = usePendingCount(userId);
   const status = useQueueStatusStore((s) => s.status);
+  const lastSyncedAt = useQueueStatusStore((s) => s.lastSyncedAt) ?? loadLastSync(userId);
 
   const [announcement, setAnnouncement] = useState('');
   const prevPending = useRef(0);
@@ -37,16 +49,29 @@ export function SyncChip({ userId }: { userId: string }) {
       <span aria-live="polite" role="status" className="sr-only">
         {announcement}
       </span>
-      {pending > 0 && (
+      {pending > 0 ? (
         <span
           title={`${pending} ${entriesWord(pending)} pending sync (${stateLabel})`}
-          className="flex items-center gap-1.5 rounded-full border border-slate-300 px-2.5 py-1 text-xs tabular-nums text-slate-600 dark:border-slate-600 dark:text-slate-300"
+          className="flex shrink-0 items-center gap-1.5 rounded-full border border-slate-300 px-2.5 py-1 text-xs tabular-nums text-slate-600 dark:border-slate-600 dark:text-slate-300"
         >
           {state === 'syncing' ? <SpinnerIcon /> : state === 'auth' ? <KeyIcon /> : <CloudOffIcon />}
           {pending}
           <span className="sr-only">
             {entriesWord(pending)} pending sync, {stateLabel}
           </span>
+        </span>
+      ) : (
+        <span
+          title={
+            lastSyncedAt
+              ? `All entries synced — last sync ${formatSyncTime(lastSyncedAt)}`
+              : 'All entries synced'
+          }
+          className="flex shrink-0 items-center gap-1.5 rounded-full border border-transparent px-2.5 py-1 text-xs tabular-nums text-slate-400 dark:text-slate-500"
+        >
+          <CheckIcon />
+          {lastSyncedAt !== null && formatSyncTime(lastSyncedAt)}
+          <span className="sr-only">all entries synced</span>
         </span>
       )}
     </>
@@ -64,6 +89,14 @@ const iconProps = {
   strokeLinecap: 'round',
   strokeLinejoin: 'round',
 } as const;
+
+function CheckIcon() {
+  return (
+    <svg {...iconProps}>
+      <path d="M20 6 9 17l-5-5" />
+    </svg>
+  );
+}
 
 function CloudOffIcon() {
   return (

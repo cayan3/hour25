@@ -2,6 +2,7 @@ import { offlineDB, type QueuedWrite } from './store';
 import { classifyError } from '../db/errors';
 import { MAX_FLUSH_ATTEMPTS, FLUSH_BATCH_SIZE } from '../constants';
 import { useQueueStatusStore } from '../../store/queueStatus';
+import { recordLastSync } from '../lastSync';
 
 export type FlushResult = 'complete' | 'network' | 'auth';
 
@@ -38,9 +39,15 @@ async function getUserRows(userId: string): Promise<QueuedWrite[]> {
   return all.filter((r) => r.userId === userId);
 }
 
+// True once this flush invocation confirmed at least one send (conditional
+// delete only ever runs after a 2xx — dead-lettering doesn't count). Safe as
+// module state: requestFlush makes flushes single-flight per tab.
+let confirmedSendThisFlush = false;
+
 // C-27: only delete a queue row if its rev is unchanged since the snapshot
 // we sent — an edit made mid-flight keeps its fresh row and flushes next round.
 async function conditionalDelete(rows: QueuedWrite[]): Promise<void> {
+  confirmedSendThisFlush = true;
   await offlineDB.transaction('rw', offlineDB.writes, async () => {
     for (const row of rows) {
       const current = await offlineDB.writes.get([row.userId, row.date, row.slotIndex]);
@@ -162,6 +169,7 @@ export async function flushOnce(userId: string): Promise<FlushResult> {
   }
 
   useQueueStatusStore.getState().setStatus('flushing');
+  confirmedSendThisFlush = false;
   const rows = await getUserRows(userId);
   let result: FlushResult = 'complete';
   for (let i = 0; i < rows.length; i += FLUSH_BATCH_SIZE) {
@@ -173,6 +181,17 @@ export async function flushOnce(userId: string): Promise<FlushResult> {
     }
   }
   await publishStatus(userId, result);
+
+  // Last-sync time: only when at least one send was actually confirmed — a
+  // zero-row flush (or one stopped by a network failure before any batch
+  // landed) proves nothing about server contact, and dead-lettering isn't
+  // syncing. A partial flush that confirmed some batches before a later one
+  // failed still counts: those rows ARE on the server.
+  if (confirmedSendThisFlush) {
+    const ts = Date.now();
+    recordLastSync(userId, ts);
+    useQueueStatusStore.getState().setLastSyncedAt(ts);
+  }
 
   // Queue-empty transition: only after a flush that had rows to send and left
   // none behind (a row re-enqueued mid-flight survives conditional delete and

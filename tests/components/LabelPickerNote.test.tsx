@@ -52,8 +52,9 @@ describe('LabelPicker notes', () => {
     renderPicker({ hasEntry: true, initialNote: 'standup ran long' });
     const field = screen.getByLabelText<HTMLTextAreaElement>('Note for this slot');
     expect(field.value).toBe('standup ran long');
-    // Unchanged note → no Save button (selection would carry it anyway).
-    expect(screen.queryByRole('button', { name: 'Save note' })).toBeNull();
+    // The Save button is always present (so typing never resizes the list)
+    // but disabled until the note actually differs.
+    expect(screen.getByRole('button', { name: 'Save note' })).toHaveProperty('disabled', true);
   });
 
   it('selecting a label passes a changed note along, whitespace-only as null', () => {
@@ -92,6 +93,17 @@ describe('LabelPicker notes', () => {
     // '1' must not select Recent #1, Enter must not select the top match.
     fireEvent.keyDown(field, { key: '1' });
     fireEvent.keyDown(field, { key: 'Enter' });
+    fireEvent.keyDown(field, { key: 'Enter', shiftKey: true }); // newline
     expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it('Enter in the note field saves a changed note (Shift+Enter stays a newline)', () => {
+    const { onSaveNote } = renderPicker({ hasEntry: true, initialNote: null });
+    const field = screen.getByLabelText('Note for this slot');
+    fireEvent.change(field, { target: { value: 'wrapped up early' } });
+    fireEvent.keyDown(field, { key: 'Enter', shiftKey: true });
+    expect(onSaveNote).not.toHaveBeenCalled();
+    fireEvent.keyDown(field, { key: 'Enter' });
+    expect(onSaveNote).toHaveBeenCalledWith('wrapped up early');
   });
 });

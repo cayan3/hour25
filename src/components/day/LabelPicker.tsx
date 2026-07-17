@@ -331,22 +331,31 @@ export function LabelPicker({
               value={note}
               onChange={(e) => setNote(e.target.value)}
               // Keys typed here are text, not picker commands (digits must not
-              // select Recents, Delete must not clear the slot, Enter is a
-              // newline) — only Escape bubbles up to close the picker.
+              // select Recents, Delete must not clear the slot) — only Escape
+              // bubbles up to close the picker. Enter matches the Save note
+              // button (or just closes when nothing changed); Shift+Enter
+              // makes the newline (Week 5 feedback).
               onKeyDown={(e) => {
-                if (e.key !== 'Escape') e.stopPropagation();
+                if (e.key === 'Escape') return;
+                e.stopPropagation();
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  if (noteChanged) onSaveNote(noteValue);
+                  else onClose();
+                }
               }}
               className="w-full resize-none rounded border border-slate-300 px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 dark:border-slate-600 dark:bg-slate-900"
             />
-            {noteChanged && (
-              <button
-                type="button"
-                onClick={() => onSaveNote(noteValue)}
-                className="mt-1 flex min-h-11 w-full touch-manipulation items-center justify-center rounded bg-sky-600 px-3 py-2 text-sm font-medium text-white focus-visible:ring-2 focus-visible:ring-offset-2 hover:bg-sky-700"
-              >
-                Save note
-              </button>
-            )}
+            {/* Always present so typing never resizes the list above it —
+                disabled until the note actually differs (Week 5 feedback). */}
+            <button
+              type="button"
+              disabled={!noteChanged}
+              onClick={() => onSaveNote(noteValue)}
+              className="mt-1 flex min-h-11 w-full touch-manipulation items-center justify-center rounded bg-sky-600 px-3 py-2 text-sm font-medium text-white focus-visible:ring-2 focus-visible:ring-offset-2 enabled:hover:bg-sky-700 disabled:bg-slate-200 disabled:text-slate-400 dark:disabled:bg-slate-700 dark:disabled:text-slate-500"
+            >
+              Save note
+            </button>
           </div>
         )}
         {hasEntry && (

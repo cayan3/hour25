@@ -14,6 +14,25 @@ import { DayView } from './components/day/DayView';
 import { SettingsView } from './components/settings/SettingsView';
 import { OnboardingWizard } from './components/onboarding/OnboardingWizard';
 
+function GearIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      width={14}
+      height={14}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+    </svg>
+  );
+}
+
 type AuthState =
   | { status: 'loading' }
   | { status: 'signed-out' }
@@ -142,21 +161,24 @@ function AuthenticatedShell({ userId, email }: { userId: string; email: string |
               type="button"
               onClick={() => setView(tab)}
               aria-current={view === tab ? 'page' : undefined}
-              className={`rounded px-3 py-1.5 text-sm capitalize focus-visible:ring-2 focus-visible:ring-offset-2 ${
+              className={`flex items-center gap-1.5 rounded px-3 py-1.5 text-sm capitalize focus-visible:ring-2 focus-visible:ring-offset-2 ${
                 view === tab
                   ? 'bg-slate-200 text-slate-900 dark:bg-slate-700 dark:text-slate-50'
                   : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
               }`}
             >
+              {tab === 'settings' && <GearIcon />}
               {tab}
             </button>
           ))}
         </nav>
         <div className="flex min-w-0 items-center gap-2">
+          {/* Chip left of the email (Week 5 feedback): its state changes must
+              not shove the rest of the header around. */}
+          <SyncChip userId={userId} />
           <span className="hidden max-w-56 truncate text-sm text-slate-500 dark:text-slate-400 sm:block">
             {email}
           </span>
-          <SyncChip userId={userId} />
           <ThemeToggle />
           <button
             type="button"

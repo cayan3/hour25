@@ -15,11 +15,16 @@ export function relativeLuminance(hex: string): number {
   return 0.2126 * srgbToLinear(r) + 0.7152 * srgbToLinear(g) + 0.0722 * srgbToLinear(b);
 }
 
-const LUMINANCE_THRESHOLD = 0.179;
-
 // The only sanctioned way to place text on a label color (DESIGN.md §6).
+// Prefers near-white whenever near-white clears AA — a consistent default,
+// per Week 5 feedback that the black/white mix felt arbitrary — and falls
+// back to whichever color contrasts better (mid-lightness backgrounds
+// mathematically can't give white 4.5:1; those keep dark text, and truly
+// AA-impossible customs are flagged by isLowContrast below).
 export function contrastText(hex: string): '#0f172a' | '#f8fafc' {
-  return relativeLuminance(hex) > LUMINANCE_THRESHOLD ? '#0f172a' : '#f8fafc';
+  const white = contrastRatio(hex, '#f8fafc');
+  if (white >= AA_TEXT_CONTRAST) return '#f8fafc';
+  return contrastRatio(hex, '#0f172a') >= white ? '#0f172a' : '#f8fafc';
 }
 
 export function contrastRatio(hexA: string, hexB: string): number {

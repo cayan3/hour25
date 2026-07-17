@@ -63,6 +63,9 @@ export function DayListMobile({
   }
 
   function handleKeyDown(e: React.KeyboardEvent): void {
+    // The picker owns the keyboard while open — same guard as the desktop
+    // grid, so row focus can't drift under an open sheet.
+    if (pickerOpen) return;
     switch (e.key) {
       case 'ArrowDown':
         e.preventDefault();
@@ -183,7 +186,13 @@ const SlotRow = forwardRef<HTMLButtonElement, SlotRowProps>(function SlotRow(
         ref={ref}
         type="button"
         aria-label={accessibleName}
-        title={label ? `${label.name}${label.deleted_at !== null ? ' (deleted)' : ''}` : undefined}
+        title={
+          label
+            ? `${label.name}${label.deleted_at !== null ? ' (deleted)' : ''}${
+                entry?.note ? ` — ${entry.note}` : ''
+              }`
+            : undefined
+        }
         tabIndex={tabIndex}
         onFocus={onFocus}
         onClick={onOpen}
