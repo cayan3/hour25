@@ -7,7 +7,7 @@ import { initOfflineSync } from './lib/offline/sync';
 import { queryClient } from './lib/queryClient';
 import { SignInView } from './components/SignInView';
 import { ThemeToggle } from './components/ThemeToggle';
-import { TodayPlaceholder } from './components/TodayPlaceholder';
+import { DayView } from './components/day/DayView';
 import { SettingsView } from './components/settings/SettingsView';
 import { OnboardingWizard } from './components/onboarding/OnboardingWizard';
 
@@ -156,7 +156,7 @@ function AuthenticatedShell({ userId, email }: { userId: string; email: string |
           </button>
         </div>
       </header>
-      {view === 'today' ? <TodayPlaceholder userId={userId} /> : <SettingsView userId={userId} />}
+      {view === 'today' ? <DayView userId={userId} /> : <SettingsView userId={userId} />}
     </div>
   );
 }

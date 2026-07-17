@@ -1,0 +1,236 @@
+import { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
+import type { MergedEntry } from '../../lib/merge';
+import type { LabelRow } from '../../lib/db/labels';
+import type { PickerAnchor } from '../../store/day';
+import { computeRuns, clipRunsToRows, type RunSegment } from '../../lib/runs';
+import { slotAccessibleName } from '../../lib/slotNames';
+import { contrastText } from '../../lib/color';
+import { SLOTS_PER_DAY } from '../../lib/constants';
+
+const SLOTS_PER_ROW = 12;
+const ROWS = SLOTS_PER_DAY / SLOTS_PER_ROW;
+const GAP_PX = 2; // gap-0.5 — the segment overlay spans across these gaps
+
+// DESIGN §2: four rows of twelve slots, each row six hours. Run merging is
+// visual, not structural (C-41): every slot keeps its own role="gridcell"
+// button and exact hit target; a contiguous same-label run renders as one
+// apparent block via a pointer-events-none overlay (background + label name
+// painted once per row-clipped segment) UNDER the transparent cell buttons.
+// Runs clip at row boundaries — a 23:00–07:00 sleep run rendering as two
+// blocks is correct, not a bug.
+
+interface DayGridDesktopProps {
+  date: string;
+  merged: MergedEntry[];
+  labelById: Map<string, LabelRow>;
+  nowSlot: number | null; // today's current slot, else null
+  hintSlot: number | null; // first empty slot, highlighted while the hint is up
+  onOpenPicker: (slotIndex: number, anchor: PickerAnchor) => void;
+  onAssignLast: (slotIndex: number) => void; // Shift+Enter (DESIGN §2)
+  onClear: (slotIndex: number) => void; // Delete/Backspace (C-30)
+  pickerOpen: boolean;
+}
+
+export function DayGridDesktop({
+  date,
+  merged,
+  labelById,
+  nowSlot,
+  hintSlot,
+  onOpenPicker,
+  onAssignLast,
+  onClear,
+  pickerOpen,
+}: DayGridDesktopProps) {
+  const [focusedSlot, setFocusedSlot] = useState(0);
+  const cellRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const wasPickerOpen = useRef(false);
+
+  const entryBySlot = useMemo(() => new Map(merged.map((e) => [e.slotIndex, e])), [merged]);
+  const segmentsByStart = useMemo(() => {
+    const map = new Map<number, RunSegment>();
+    for (const seg of clipRunsToRows(computeRuns(merged), SLOTS_PER_ROW)) map.set(seg.start, seg);
+    return map;
+  }, [merged]);
+
+  // Return focus to the grid when the picker closes (it stole it on open).
+  useEffect(() => {
+    if (wasPickerOpen.current && !pickerOpen) cellRefs.current[focusedSlot]?.focus();
+    wasPickerOpen.current = pickerOpen;
+  }, [pickerOpen, focusedSlot]);
+
+  function moveFocus(next: number): void {
+    const clamped = Math.max(0, Math.min(SLOTS_PER_DAY - 1, next));
+    setFocusedSlot(clamped);
+    cellRefs.current[clamped]?.focus();
+  }
+
+  function openPickerAt(slotIndex: number): void {
+    const rect = cellRefs.current[slotIndex]?.getBoundingClientRect();
+    onOpenPicker(slotIndex, {
+      top: rect?.top ?? 0,
+      left: rect?.left ?? 0,
+      bottom: rect?.bottom ?? 0,
+      width: rect?.width ?? 0,
+    });
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent): void {
+    switch (e.key) {
+      case 'ArrowRight':
+        e.preventDefault();
+        moveFocus(focusedSlot + 1);
+        break;
+      case 'ArrowLeft':
+        e.preventDefault();
+        moveFocus(focusedSlot - 1);
+        break;
+      case 'ArrowDown':
+        e.preventDefault();
+        moveFocus(focusedSlot + SLOTS_PER_ROW);
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        moveFocus(focusedSlot - SLOTS_PER_ROW);
+        break;
+      case 'Enter':
+      case ' ':
+        e.preventDefault();
+        // Shift+Enter re-applies the last-used label without opening the picker.
+        if (e.key === 'Enter' && e.shiftKey) onAssignLast(focusedSlot);
+        else openPickerAt(focusedSlot);
+        break;
+      case 'Delete':
+      case 'Backspace':
+        e.preventDefault();
+        onClear(focusedSlot);
+        break;
+      // TODO (Week 5, notes): `n` opens the note popover for the focused slot.
+      default:
+        break;
+    }
+  }
+
+  return (
+    <div role="grid" aria-label={`Day grid for ${date}`} onKeyDown={handleKeyDown} className="select-none">
+      {Array.from({ length: ROWS }, (_, row) => (
+        <div key={row}>
+          {/* Hour markers above each row at every second column. */}
+          <div role="presentation" aria-hidden="true" className="mt-2 grid grid-cols-12 gap-0.5">
+            {Array.from({ length: SLOTS_PER_ROW / 2 }, (_, h) => (
+              <div key={h} className="col-span-2 text-[10px] leading-4 text-slate-400 dark:text-slate-500">
+                {String(row * 6 + h).padStart(2, '0')}:00
+              </div>
+            ))}
+          </div>
+          <div role="row" className="grid grid-cols-12 gap-0.5">
+            {Array.from({ length: SLOTS_PER_ROW }, (_, col) => {
+              const slotIndex = row * SLOTS_PER_ROW + col;
+              return (
+                <SlotCell
+                  key={slotIndex}
+                  ref={(el) => {
+                    cellRefs.current[slotIndex] = el;
+                  }}
+                  slotIndex={slotIndex}
+                  entry={entryBySlot.get(slotIndex) ?? null}
+                  segment={segmentsByStart.get(slotIndex) ?? null}
+                  label={labelFor(entryBySlot.get(slotIndex) ?? null, labelById)}
+                  isNow={slotIndex === nowSlot}
+                  isHint={slotIndex === hintSlot}
+                  tabIndex={slotIndex === focusedSlot ? 0 : -1}
+                  onFocus={() => setFocusedSlot(slotIndex)}
+                  onClick={() => openPickerAt(slotIndex)}
+                />
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function labelFor(entry: MergedEntry | null, labelById: Map<string, LabelRow>): LabelRow | null {
+  return entry ? (labelById.get(entry.labelId) ?? null) : null;
+}
+
+interface SlotCellProps {
+  slotIndex: number;
+  entry: MergedEntry | null;
+  segment: RunSegment | null; // set only on the first slot of a clipped segment
+  label: LabelRow | null;
+  isNow: boolean;
+  isHint: boolean;
+  tabIndex: number;
+  onFocus: () => void;
+  onClick: () => void;
+}
+
+const SlotCell = forwardRef<HTMLButtonElement, SlotCellProps>(function SlotCell(
+  { slotIndex, entry, segment, label, isNow, isHint, tabIndex, onFocus, onClick },
+  ref,
+) {
+  const filled = entry !== null;
+  const accessibleName = slotAccessibleName(
+    slotIndex,
+    label ? { name: label.name, deleted: label.deleted_at !== null } : null,
+    Boolean(entry?.note),
+  );
+
+  return (
+    <button
+      ref={ref}
+      type="button"
+      role="gridcell"
+      aria-label={accessibleName}
+      tabIndex={tabIndex}
+      onFocus={onFocus}
+      onClick={onClick}
+      className={`relative h-10 touch-manipulation rounded focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-offset-2 motion-safe:transition-colors motion-safe:duration-100 ${
+        filled
+          ? ''
+          : `border border-dashed border-slate-300 dark:border-slate-600 ${
+              isHint ? 'ring-2 ring-sky-500 ring-offset-1' : ''
+            }`
+      }`}
+    >
+      {segment && label && <SegmentOverlay segment={segment} label={label} />}
+      {entry?.note && label && (
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute right-1 top-1 z-[1] h-1.5 w-1.5 rounded-full"
+          style={{ backgroundColor: contrastText(label.color) }}
+        />
+      )}
+      {isNow && (
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute -bottom-1 left-0 z-[1] h-0.5 w-full rounded bg-sky-500"
+        />
+      )}
+    </button>
+  );
+});
+
+// The visual body of a merged run segment: background + the label name painted
+// once, spanning the segment's cells (and the 2px gaps between them). Sits
+// under the transparent cell buttons and never intercepts a click — the slot
+// element is what you click (C-41).
+function SegmentOverlay({ segment, label }: { segment: RunSegment; label: LabelRow }) {
+  const len = segment.end - segment.start + 1;
+  const name = segment.runLength <= 2 ? label.name.slice(0, 2) : label.name;
+  return (
+    <span
+      aria-hidden="true"
+      className="pointer-events-none absolute inset-y-0 left-0 flex items-center overflow-hidden rounded px-1.5 text-xs font-medium"
+      style={{
+        width: `calc(${len * 100}% + ${(len - 1) * GAP_PX}px)`,
+        backgroundColor: label.color,
+        color: contrastText(label.color),
+      }}
+    >
+      <span className="truncate">{name}</span>
+    </span>
+  );
+}
