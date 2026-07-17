@@ -88,11 +88,16 @@ export function LabelPicker({
   const inputRef = useRef<HTMLInputElement>(null);
   const noteRef = useRef<HTMLTextAreaElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  // A whitespace-only note is no note. Only a *changed* note rides along with
-  // a label selection — unchanged passes undefined so re-selecting the same
+  // Notes save trimmed: leading/trailing whitespace (incl. trailing newlines)
+  // is invisible in tooltips and would make "changed" trigger on a diff no
+  // one can see; interior newlines are real structure and are preserved.
+  // Whitespace-only is no note. Only a *changed* note rides along with a
+  // label selection — unchanged passes undefined so re-selecting the same
   // label stays a true no-op (useSlotActions guards on it).
-  const noteValue = note.trim() === '' ? null : note;
+  const trimmedNote = note.trim();
+  const noteValue = trimmedNote === '' ? null : trimmedNote;
   const noteChanged = noteValue !== (initialNote ?? null);
 
   function selectLabel(labelId: string): void {
@@ -161,13 +166,18 @@ export function LabelPicker({
   }, [query]);
 
   // Autofocus the search only in the desktop popover (keyboard-first flow).
-  // On the bottom sheet, focusing would summon the on-screen keyboard right
-  // on top of the sheet — tapping a label directly is the primary flow there,
-  // and the search field is one tap away when wanted. The `n` key lands in
-  // the note field instead (both modes — pressing `n` was a keyboard action).
+  // On the bottom sheet, focusing the *input* would summon the on-screen
+  // keyboard right on top of the sheet — instead the sheet focuses its own
+  // container (tabIndex -1: focusable, not editable, summons no keyboard), so
+  // a physical keyboard's Escape/arrows/Enter still work in sheet mode — a
+  // narrow desktop window gets the sheet too, and its keys were dead before
+  // this (the C-65 guard rightly makes the list behind ignore them). The `n`
+  // key lands in the note field in both modes — pressing `n` was already a
+  // keyboard action.
   useEffect(() => {
     if (autofocusNote) noteRef.current?.focus();
     else if (mode === 'popover') inputRef.current?.focus();
+    else containerRef.current?.focus();
   }, [mode, autofocusNote]);
 
   // Keep the active option scrolled into view during arrow navigation.
@@ -223,8 +233,13 @@ export function LabelPicker({
 
   const containerStyle = useMemo<React.CSSProperties>(() => {
     if (mode === 'sheet') {
+      // Lift the *content* above the keyboard with bottom padding rather than
+      // moving the sheet up: the sheet stays anchored to the screen bottom, so
+      // no background peeks through beneath it while the keyboard is open
+      // (Week 5 feedback). The taller top clearance keeps a comfortably
+      // tappable strip of backdrop for closing without picking anything.
       return keyboardInset
-        ? { bottom: keyboardInset, maxHeight: `calc(100dvh - ${keyboardInset}px - 4rem)` }
+        ? { paddingBottom: keyboardInset + 12, maxHeight: 'calc(100dvh - 5rem)' }
         : {};
     }
     if (!anchor) return {};
@@ -246,16 +261,35 @@ export function LabelPicker({
         aria-hidden="true"
       />
       <div
+        ref={containerRef}
         role="dialog"
         aria-label={`Label for ${slotRangeLabel(slotIndex)}`}
+        tabIndex={-1}
         style={containerStyle}
         className={
           mode === 'sheet'
-            ? 'fixed inset-x-0 bottom-0 z-50 flex max-h-[70vh] flex-col rounded-t-xl bg-white p-3 shadow-xl motion-safe:animate-sheet-in dark:bg-slate-800'
-            : 'fixed z-50 flex max-h-96 flex-col rounded-lg border border-slate-200 bg-white p-2 shadow-xl motion-safe:animate-picker-in dark:border-slate-700 dark:bg-slate-800'
+            ? 'fixed inset-x-0 bottom-0 z-50 flex max-h-[70vh] flex-col rounded-t-xl bg-white p-3 shadow-xl outline-none motion-safe:animate-sheet-in dark:bg-slate-800'
+            : 'fixed z-50 flex max-h-96 flex-col rounded-lg border border-slate-200 bg-white p-2 shadow-xl outline-none motion-safe:animate-picker-in dark:border-slate-700 dark:bg-slate-800'
         }
         onKeyDown={handleKeyDown}
       >
+        {mode === 'sheet' && (
+          // Explicit close affordance (Week 5 feedback: exiting via the
+          // backdrop sliver was easy to fumble, especially mid-note).
+          <div className="mb-1 flex shrink-0 items-center justify-between">
+            <span className="px-1 text-xs text-slate-500 dark:text-slate-400">
+              {slotRangeLabel(slotIndex)}
+            </span>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close"
+              className="flex min-h-11 min-w-11 touch-manipulation items-center justify-center rounded text-slate-500 focus-visible:ring-2 focus-visible:ring-offset-2 dark:text-slate-400"
+            >
+              ✕
+            </button>
+          </div>
+        )}
         <input
           ref={inputRef}
           type="text"
@@ -268,7 +302,11 @@ export function LabelPicker({
           placeholder="Search labels…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          className="mb-2 min-h-11 rounded border border-slate-300 px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 dark:border-slate-600 dark:bg-slate-900"
+          // text-base (16px) in the sheet: iOS auto-zooms into any focused
+          // field with a smaller font and stays zoomed after (Week 5 feedback).
+          className={`mb-2 min-h-11 rounded border border-slate-300 px-3 py-2 focus-visible:ring-2 focus-visible:ring-offset-2 dark:border-slate-600 dark:bg-slate-900 ${
+            mode === 'sheet' ? 'text-base' : 'text-sm'
+          }`}
         />
         <ul id={listboxId} ref={listRef} role="listbox" className="overflow-y-auto overscroll-contain">
           {flatOptions.length === 0 && (
@@ -322,7 +360,7 @@ export function LabelPicker({
           ))}
         </ul>
         {hasEntry && (
-          <div className="mt-1 shrink-0 border-t border-slate-200 px-1 pt-2 dark:border-slate-700">
+          <div className="mt-1 shrink-0 space-y-1 border-t border-slate-200 px-1 pt-2 dark:border-slate-700">
             <textarea
               ref={noteRef}
               rows={2}
@@ -344,28 +382,30 @@ export function LabelPicker({
                   else onClose();
                 }
               }}
-              className="w-full resize-none rounded border border-slate-300 px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 dark:border-slate-600 dark:bg-slate-900"
+              className={`w-full resize-none rounded border border-slate-300 px-3 py-2 focus-visible:ring-2 focus-visible:ring-offset-2 dark:border-slate-600 dark:bg-slate-900 ${
+                mode === 'sheet' ? 'text-base' : 'text-sm'
+              }`}
             />
             {/* Always present so typing never resizes the list above it —
-                disabled until the note actually differs (Week 5 feedback). */}
+                disabled until the note actually differs (Week 5 feedback).
+                Both footer actions share one container and one shape so
+                nothing overlaps or mismatches on hover. */}
             <button
               type="button"
               disabled={!noteChanged}
               onClick={() => onSaveNote(noteValue)}
-              className="mt-1 flex min-h-11 w-full touch-manipulation items-center justify-center rounded bg-sky-600 px-3 py-2 text-sm font-medium text-white focus-visible:ring-2 focus-visible:ring-offset-2 enabled:hover:bg-sky-700 disabled:bg-slate-200 disabled:text-slate-400 dark:disabled:bg-slate-700 dark:disabled:text-slate-500"
+              className="flex min-h-11 w-full touch-manipulation items-center justify-center rounded bg-sky-600 px-3 py-2 text-sm font-medium text-white focus-visible:ring-2 focus-visible:ring-offset-2 enabled:hover:bg-sky-700 disabled:bg-slate-200 disabled:text-slate-400 dark:disabled:bg-slate-700 dark:disabled:text-slate-500"
             >
               Save note
             </button>
+            <button
+              type="button"
+              onClick={onClear}
+              className="flex min-h-11 w-full touch-manipulation items-center justify-center rounded px-3 py-2 text-sm text-slate-600 focus-visible:ring-2 focus-visible:ring-offset-2 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700"
+            >
+              Clear slot
+            </button>
           </div>
-        )}
-        {hasEntry && (
-          <button
-            type="button"
-            onClick={onClear}
-            className="flex min-h-11 w-full shrink-0 touch-manipulation items-center rounded-b px-3 py-2 text-left text-sm text-slate-600 focus-visible:ring-2 focus-visible:ring-offset-2 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700"
-          >
-            Clear slot
-          </button>
         )}
       </div>
     </>
