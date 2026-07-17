@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { offlineDB, type QueuedWrite } from '../../../src/lib/offline/store';
 import { configureFlush, flushOnce, type FlushDeps } from '../../../src/lib/offline/flush';
+import { useQueueStatusStore } from '../../../src/store/queueStatus';
 import { deferred } from '../../helpers/deferred';
 import { MAX_FLUSH_ATTEMPTS } from '../../../src/lib/constants';
 
@@ -30,6 +31,7 @@ function seedRow(overrides: Partial<QueuedWrite> = {}): QueuedWrite {
 beforeEach(async () => {
   await offlineDB.writes.clear();
   await offlineDB.dead.clear();
+  useQueueStatusStore.setState({ status: 'idle', deadCount: 0 });
 });
 
 function baseDeps(overrides: Partial<FlushDeps> = {}): FlushDeps {
@@ -191,5 +193,97 @@ describe('flushOnce — C-29 attempts policy', () => {
     // so the flush still stops there — slot 7 stays queued for the next round.
     expect(result).toBe('network');
     expect(await offlineDB.writes.get([USER, '2026-07-15', 7])).toBeDefined();
+  });
+});
+
+describe('flushOnce — SPEC §6 step 7: queueStatus + queue-empty transition', () => {
+  it("publishes 'auth' when there is no session", async () => {
+    configureFlush(baseDeps({ getSession: async () => null }));
+    await flushOnce(USER);
+    expect(useQueueStatusStore.getState().status).toBe('auth');
+  });
+
+  it("publishes 'idle' after a complete flush", async () => {
+    configureFlush(baseDeps());
+    await offlineDB.writes.put(seedRow({ slotIndex: 1 }));
+    await flushOnce(USER);
+    expect(useQueueStatusStore.getState().status).toBe('idle');
+  });
+
+  it("publishes 'offline' after a batch-level network failure", async () => {
+    const sendUpsertBatch = vi.fn(async () => {
+      throw Object.assign(new Error('down'), { status: 500 });
+    });
+    configureFlush(baseDeps({ sendUpsertBatch }));
+    await offlineDB.writes.put(seedRow({ slotIndex: 1 }));
+    await flushOnce(USER);
+    expect(useQueueStatusStore.getState().status).toBe('offline');
+  });
+
+  it("publishes the current user's dead-letter count", async () => {
+    const sendUpsertBatch = vi.fn(async () => {
+      throw Object.assign(new Error('constraint violation'), { code: '23505' });
+    });
+    configureFlush(baseDeps({ sendUpsertBatch }));
+    await offlineDB.writes.put(seedRow({ slotIndex: 1 }));
+    // Another user's dead row must not count toward this user's total.
+    await offlineDB.dead.add({ ...seedRow({ userId: 'user-2' }), failedAt: Date.now(), reason: 'x' });
+
+    await flushOnce(USER);
+
+    expect(useQueueStatusStore.getState().deadCount).toBe(1);
+  });
+
+  it('fires onQueueDrained once when a flush with rows leaves the queue empty', async () => {
+    const onQueueDrained = vi.fn();
+    configureFlush(baseDeps({ onQueueDrained }));
+    await offlineDB.writes.put(seedRow({ slotIndex: 1 }));
+
+    await flushOnce(USER);
+
+    expect(onQueueDrained).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not fire onQueueDrained when the queue was already empty', async () => {
+    const onQueueDrained = vi.fn();
+    configureFlush(baseDeps({ onQueueDrained }));
+
+    await flushOnce(USER);
+
+    expect(onQueueDrained).not.toHaveBeenCalled();
+  });
+
+  it('does not fire onQueueDrained when the flush stopped on a network failure', async () => {
+    const onQueueDrained = vi.fn();
+    const sendUpsertBatch = vi.fn(async () => {
+      throw Object.assign(new Error('down'), { status: 500 });
+    });
+    configureFlush(baseDeps({ sendUpsertBatch, onQueueDrained }));
+    await offlineDB.writes.put(seedRow({ slotIndex: 1 }));
+
+    await flushOnce(USER);
+
+    expect(onQueueDrained).not.toHaveBeenCalled();
+  });
+
+  it('does not fire onQueueDrained when a mid-flight edit left a row behind', async () => {
+    const onQueueDrained = vi.fn();
+    const gate = deferred<void>();
+    const sendUpsertBatch = vi.fn(() => gate.promise);
+    configureFlush(baseDeps({ sendUpsertBatch, onQueueDrained }));
+
+    await offlineDB.writes.put(seedRow({ slotIndex: 10, labelId: 'label-A', rev: 'rev-A' }));
+    const flushPromise = flushOnce(USER);
+    await vi.waitFor(() => {
+      expect(sendUpsertBatch).toHaveBeenCalledTimes(1);
+    });
+
+    await offlineDB.writes.put(seedRow({ slotIndex: 10, labelId: 'label-B', rev: 'rev-B' }));
+    gate.resolve();
+    await flushPromise;
+
+    // The edited row survived conditional delete — the queue is NOT empty, so
+    // the ['entries'] swap to server truth must wait for the next round.
+    expect(onQueueDrained).not.toHaveBeenCalled();
   });
 });

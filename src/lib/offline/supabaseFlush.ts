@@ -1,4 +1,5 @@
 import { supabase } from '../supabase';
+import { queryClient } from '../queryClient';
 import { configureFlush, type FlushSession } from './flush';
 import type { QueuedWrite } from './store';
 
@@ -34,6 +35,13 @@ async function sendDeleteBatch(userId: string, date: string, slotIndices: number
   if (error) throw error;
 }
 
+// §7.5: invalidate the ['entries'] prefix — never a specific key. Fired once
+// per queue-empty transition; the visual result should be a no-op (the overlay
+// already showed these writes), it just swaps overlay truth for server truth.
+function onQueueDrained(): void {
+  queryClient.invalidateQueries({ queryKey: ['entries'] });
+}
+
 export function configureSupabaseFlush(): void {
-  configureFlush({ getSession, sendUpsertBatch, sendDeleteBatch });
+  configureFlush({ getSession, sendUpsertBatch, sendDeleteBatch, onQueueDrained });
 }

@@ -1,6 +1,7 @@
 import { offlineDB, type QueuedWrite } from './store';
 import { classifyError } from '../db/errors';
 import { MAX_FLUSH_ATTEMPTS, FLUSH_BATCH_SIZE } from '../constants';
+import { useQueueStatusStore } from '../../store/queueStatus';
 
 export type FlushResult = 'complete' | 'network' | 'auth';
 
@@ -12,6 +13,11 @@ export interface FlushDeps {
   getSession: () => Promise<FlushSession | null>;
   sendUpsertBatch: (userId: string, rows: QueuedWrite[]) => Promise<void>;
   sendDeleteBatch: (userId: string, date: string, slotIndices: number[]) => Promise<void>;
+  // SPEC §6 step 7: called once on the queue-empty transition after a flush
+  // actually sent rows, so the app can invalidate the ['entries'] prefix and
+  // swap the UI from overlay truth to confirmed server truth. Injected (like
+  // the senders) to keep this file free of react-query.
+  onQueueDrained?: () => void;
 }
 
 let deps: FlushDeps | null = null;
@@ -136,22 +142,43 @@ async function sendBatch(userId: string, batch: QueuedWrite[], d: FlushDeps): Pr
   }
 }
 
-// TODO (day-view/sync-surfaces work, SPEC §6 step 7): on the queue-empty
-// transition after a successful flush, invalidate the ['entries'] query-key
-// prefix so the UI swaps from overlay truth to confirmed server truth; and
-// publish flush state ('idle' | 'flushing' | 'offline' | 'auth') plus the
-// dead-letter count to a queueStatus store for the pending chip and banners.
-// Deliberately not built yet — nothing writes entries until the day view ships.
+// SPEC §6 step 7: publish flush state plus the dead-letter count to the
+// queueStatus store for the pending chip and banners (DESIGN §7).
+async function publishStatus(userId: string, result: FlushResult): Promise<void> {
+  const store = useQueueStatusStore.getState();
+  store.setStatus(result === 'complete' ? 'idle' : result === 'network' ? 'offline' : 'auth');
+  // userId isn't indexed on `dead` (schema: '++id, failedAt'); a filter scan
+  // is fine — dead-letters are rare by design.
+  store.setDeadCount(await offlineDB.dead.filter((r) => r.userId === userId).count());
+}
+
 export async function flushOnce(userId: string): Promise<FlushResult> {
   const d = requireDeps();
   const session = await d.getSession();
-  if (!session) return 'auth';
+  if (!session) {
+    // Nothing touched, no attempts burned — but the banner still needs to know.
+    useQueueStatusStore.getState().setStatus('auth');
+    return 'auth';
+  }
 
+  useQueueStatusStore.getState().setStatus('flushing');
   const rows = await getUserRows(userId);
+  let result: FlushResult = 'complete';
   for (let i = 0; i < rows.length; i += FLUSH_BATCH_SIZE) {
     const batch = rows.slice(i, i + FLUSH_BATCH_SIZE);
-    const result = await sendBatch(userId, batch, d);
-    if (result === 'network' || result === 'auth') return result;
+    const batchResult = await sendBatch(userId, batch, d);
+    if (batchResult === 'network' || batchResult === 'auth') {
+      result = batchResult;
+      break;
+    }
   }
-  return 'complete';
+  await publishStatus(userId, result);
+
+  // Queue-empty transition: only after a flush that had rows to send and left
+  // none behind (a row re-enqueued mid-flight survives conditional delete and
+  // keeps the queue non-empty — it flushes next round, and drains then).
+  if (result === 'complete' && rows.length > 0 && (await getUserRows(userId)).length === 0) {
+    d.onQueueDrained?.();
+  }
+  return result;
 }
