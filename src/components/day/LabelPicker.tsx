@@ -233,13 +233,14 @@ export function LabelPicker({
 
   const containerStyle = useMemo<React.CSSProperties>(() => {
     if (mode === 'sheet') {
-      // Lift the *content* above the keyboard with bottom padding rather than
-      // moving the sheet up: the sheet stays anchored to the screen bottom, so
-      // no background peeks through beneath it while the keyboard is open
-      // (Week 5 feedback). The taller top clearance keeps a comfortably
-      // tappable strip of backdrop for closing without picking anything.
+      // Lift the sheet above the keyboard; the background skirt rendered
+      // below (see the sheet body) covers whatever ends up beneath it, so
+      // keyboard-driven viewport quirks can't expose the page under the
+      // sheet (Week 5 rounds 2–3: padding-only and bottom-only each leaked
+      // on a real phone). The 5rem top clearance keeps a comfortably
+      // tappable strip of backdrop.
       return keyboardInset
-        ? { paddingBottom: keyboardInset + 12, maxHeight: 'calc(100dvh - 5rem)' }
+        ? { bottom: keyboardInset, maxHeight: `calc(100dvh - ${keyboardInset}px - 5rem)` }
         : {};
     }
     if (!anchor) return {};
@@ -273,6 +274,15 @@ export function LabelPicker({
         }
         onKeyDown={handleKeyDown}
       >
+        {mode === 'sheet' && (
+          // Background skirt: extends the sheet's own background well below
+          // its bottom edge, covering any gap the on-screen keyboard's
+          // viewport gymnastics open up under it.
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 top-full h-96 bg-white dark:bg-slate-800"
+          />
+        )}
         {mode === 'sheet' && (
           // Explicit close affordance (Week 5 feedback: exiting via the
           // backdrop sliver was easy to fumble, especially mid-note).
