@@ -4,7 +4,7 @@ import { offlineDB, type QueuedWrite } from '../../../src/lib/offline/store';
 import { configureFlush, flushOnce, type FlushDeps } from '../../../src/lib/offline/flush';
 import { useQueueStatusStore } from '../../../src/store/queueStatus';
 import { deferred } from '../../helpers/deferred';
-import { MAX_FLUSH_ATTEMPTS } from '../../../src/lib/constants';
+import { MAX_FLUSH_ATTEMPTS, FLUSH_BATCH_SIZE, DEAD_LETTER_TTL_MS } from '../../../src/lib/constants';
 
 const USER = 'user-1';
 let seq = 0;
@@ -31,7 +31,7 @@ function seedRow(overrides: Partial<QueuedWrite> = {}): QueuedWrite {
 beforeEach(async () => {
   await offlineDB.writes.clear();
   await offlineDB.dead.clear();
-  useQueueStatusStore.setState({ status: 'idle', deadCount: 0 });
+  useQueueStatusStore.setState({ status: 'idle', deadCount: 0, lastSyncedAt: null });
 });
 
 function baseDeps(overrides: Partial<FlushDeps> = {}): FlushDeps {
@@ -285,5 +285,79 @@ describe('flushOnce — SPEC §6 step 7: queueStatus + queue-empty transition', 
     // The edited row survived conditional delete — the queue is NOT empty, so
     // the ['entries'] swap to server truth must wait for the next round.
     expect(onQueueDrained).not.toHaveBeenCalled();
+  });
+});
+
+describe('flushOnce — dead-letter TTL purge', () => {
+  it('purges this user’s dead rows older than the TTL during flush, keeping fresh and foreign rows', async () => {
+    configureFlush(baseDeps());
+    const stale = Date.now() - DEAD_LETTER_TTL_MS - 1000;
+    await offlineDB.dead.add({ ...seedRow(), failedAt: stale, reason: 'old mine' });
+    await offlineDB.dead.add({ ...seedRow(), failedAt: Date.now(), reason: 'fresh mine' });
+    // Another user's stale row is deliberately untouched — flush only ever
+    // operates on the current user's rows.
+    await offlineDB.dead.add({ ...seedRow({ userId: 'user-2' }), failedAt: stale, reason: 'old theirs' });
+
+    await flushOnce(USER);
+
+    const remaining = await offlineDB.dead.toArray();
+    expect(remaining.map((r) => r.reason).sort()).toEqual(['fresh mine', 'old theirs']);
+    // The published count reflects the post-purge state for this user.
+    expect(useQueueStatusStore.getState().deadCount).toBe(1);
+  });
+});
+
+describe('flushOnce — last-sync gating (C-63)', () => {
+  it('records lastSyncedAt only after a flush that confirmed at least one send', async () => {
+    configureFlush(baseDeps());
+    await offlineDB.writes.put(seedRow({ slotIndex: 1 }));
+    await flushOnce(USER);
+    expect(useQueueStatusStore.getState().lastSyncedAt).toBeTypeOf('number');
+  });
+
+  it('a zero-row flush proves nothing about server contact and records nothing', async () => {
+    configureFlush(baseDeps());
+    await flushOnce(USER);
+    expect(useQueueStatusStore.getState().lastSyncedAt).toBeNull();
+  });
+
+  it('a flush stopped by a network failure before any batch landed records nothing', async () => {
+    const sendUpsertBatch = vi.fn(async () => {
+      throw Object.assign(new Error('down'), { status: 500 });
+    });
+    configureFlush(baseDeps({ sendUpsertBatch }));
+    await offlineDB.writes.put(seedRow({ slotIndex: 1 }));
+    await flushOnce(USER);
+    expect(useQueueStatusStore.getState().lastSyncedAt).toBeNull();
+  });
+
+  it('dead-lettering is not syncing — an all-dead-letter flush records nothing', async () => {
+    const sendUpsertBatch = vi.fn(async () => {
+      throw Object.assign(new Error('constraint violation'), { code: '23505' });
+    });
+    configureFlush(baseDeps({ sendUpsertBatch }));
+    await offlineDB.writes.put(seedRow({ slotIndex: 1 }));
+    await flushOnce(USER);
+    expect(await offlineDB.dead.count()).toBe(1);
+    expect(useQueueStatusStore.getState().lastSyncedAt).toBeNull();
+  });
+
+  it('a partial flush that landed a batch before a later network stop still counts', async () => {
+    let call = 0;
+    const sendUpsertBatch = vi.fn(async () => {
+      call += 1;
+      if (call > 1) throw Object.assign(new Error('down'), { status: 500 });
+    });
+    configureFlush(baseDeps({ sendUpsertBatch }));
+    // Two batches: the first lands (those rows ARE on the server), the second
+    // hits a network failure and stops the flush.
+    for (let i = 0; i < FLUSH_BATCH_SIZE + 1; i++) {
+      await offlineDB.writes.put(seedRow({ slotIndex: i }));
+    }
+
+    const result = await flushOnce(USER);
+
+    expect(result).toBe('network');
+    expect(useQueueStatusStore.getState().lastSyncedAt).toBeTypeOf('number');
   });
 });
