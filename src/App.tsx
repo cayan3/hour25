@@ -194,7 +194,13 @@ function AuthenticatedShell({ userId, email }: { userId: string; email: string |
       {view === 'today' ? (
         <DayView userId={userId} onOpenSettings={() => setView('settings')} />
       ) : (
-        <SettingsView userId={userId} revealSetAsideNonce={setAsideReveal} />
+        <SettingsView
+          userId={userId}
+          revealSetAsideNonce={setAsideReveal}
+          // One-shot: without this reset, a remounting SettingsView re-consumes
+          // the old nonce and every later Settings visit jumps to Set-aside.
+          onRevealSetAsideHandled={() => setSetAsideReveal(0)}
+        />
       )}
       <DeadLetterToast
         onOpenSettings={() => {

@@ -51,12 +51,16 @@ function CollapsedSection({
 export function SettingsView({
   userId,
   revealSetAsideNonce = 0,
+  onRevealSetAsideHandled,
 }: {
   userId: string;
   // Bumped by the dead-letter toast's Details action: expands the set-aside
   // section and scrolls to it — Details was a silent no-op when the user was
   // already on Settings with the section collapsed.
   revealSetAsideNonce?: number;
+  // Called after the reveal is consumed so the parent clears the nonce — a
+  // stale nonce would re-trigger the jump on every later Settings mount.
+  onRevealSetAsideHandled?: () => void;
 }) {
   const activeLabels = useActiveLabels(userId);
   const allLabels = useAllLabels(userId);
@@ -72,7 +76,9 @@ export function SettingsView({
     if (revealSetAsideNonce > 0) {
       setSetAsideOpen(true);
       setAsideRef.current?.scrollIntoView({ block: 'start' });
+      onRevealSetAsideHandled?.();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [revealSetAsideNonce]);
 
   return (
