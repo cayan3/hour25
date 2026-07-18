@@ -20,17 +20,27 @@ async function refreshDeadCount(userId: string): Promise<void> {
 // first: if the dead-row delete then failed, the worst case is a duplicate
 // retry, which the queue's put-based dedup makes harmless — the reverse order
 // could lose the write entirely.
+//
+// A slot can hold BOTH a live pending write and an old dead letter (the flush
+// dead-letter path warns about exactly this). The pending row is strictly
+// newer user intent, and re-enqueueing would bulkPut the stale dead content
+// over it — losing the newer write before it ever reached the server. In that
+// case the retry reduces to dropping the dead row and letting the live write
+// win.
 export async function retryDeadWrite(userId: string, dead: DeadWrite): Promise<void> {
-  await enqueueMany(userId, [
-    {
-      date: dead.date,
-      slotIndex: dead.slotIndex,
-      op: dead.op,
-      labelId: dead.labelId,
-      note: dead.note,
-      chunkMinutes: dead.chunkMinutes,
-    },
-  ]);
+  const pending = await offlineDB.writes.get([userId, dead.date, dead.slotIndex]);
+  if (!pending) {
+    await enqueueMany(userId, [
+      {
+        date: dead.date,
+        slotIndex: dead.slotIndex,
+        op: dead.op,
+        labelId: dead.labelId,
+        note: dead.note,
+        chunkMinutes: dead.chunkMinutes,
+      },
+    ]);
+  }
   if (dead.id !== undefined) await offlineDB.dead.delete(dead.id);
   await refreshDeadCount(userId);
 }
