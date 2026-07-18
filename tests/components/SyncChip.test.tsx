@@ -1,6 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
-import { SyncChip } from '../../src/components/sync/SyncChip';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, render, renderHook, screen, waitFor } from '@testing-library/react';
+import { SyncChip, usePendingDisplay } from '../../src/components/sync/SyncChip';
 import { offlineDB } from '../../src/lib/offline/store';
 import { useQueueStatusStore } from '../../src/store/queueStatus';
 
@@ -80,5 +80,80 @@ describe('SyncChip', () => {
 
     useQueueStatusStore.setState({ status: 'auth' });
     await screen.findByTitle('1 entry pending sync (sign-in needed)');
+  });
+
+  it('prefers the newer of the in-memory and persisted last-sync times (another tab may have flushed since)', async () => {
+    const older = new Date('2026-07-17T08:05:00').getTime();
+    const newer = new Date('2026-07-17T11:30:00').getTime();
+    useQueueStatusStore.setState({ lastSyncedAt: older });
+    localStorage.setItem(`last-sync:${USER}`, String(newer));
+
+    render(<SyncChip userId={USER} />);
+
+    const expected = new Date(newer).toLocaleTimeString(undefined, {
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+    const chip = await screen.findByTitle(/All entries synced — last sync /);
+    expect(chip.textContent).toContain(expected);
+  });
+
+  it('does not announce "All entries synced" when the queue drained by dead-lettering', async () => {
+    await offlineDB.writes.put(queuedRow(1));
+    render(<SyncChip userId={USER} />);
+    await screen.findByTitle('1 entry pending sync (waiting to sync)');
+
+    // The row leaves the queue because it was set aside, not synced.
+    useQueueStatusStore.setState({ deadCount: 1 });
+    await offlineDB.writes.clear();
+
+    await waitFor(() =>
+      expect(screen.getByRole('status').textContent).toBe(
+        'Sync finished — some entries could not sync and were set aside',
+      ),
+    );
+  });
+});
+
+describe('usePendingDisplay — debounce timing', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('a count change while hidden does not restart the show delay — continuous pending is what counts', () => {
+    const { result, rerender } = renderHook(({ pending }) => usePendingDisplay(pending), {
+      initialProps: { pending: 1 },
+    });
+    act(() => vi.advanceTimersByTime(200));
+    rerender({ pending: 2 }); // rapid offline tap mid-delay
+    act(() => vi.advanceTimersByTime(250)); // 450ms continuously non-empty
+    expect(result.current).toBe(true);
+  });
+
+  it('a pending blip shorter than the show delay never shows the chip', () => {
+    const { result, rerender } = renderHook(({ pending }) => usePendingDisplay(pending), {
+      initialProps: { pending: 1 },
+    });
+    act(() => vi.advanceTimersByTime(200));
+    rerender({ pending: 0 }); // fast online sync drained it
+    act(() => vi.advanceTimersByTime(1000));
+    expect(result.current).toBe(false);
+  });
+
+  it('once shown, the chip holds for the minimum visible window after the queue drains', () => {
+    const { result, rerender } = renderHook(({ pending }) => usePendingDisplay(pending), {
+      initialProps: { pending: 1 },
+    });
+    act(() => vi.advanceTimersByTime(400));
+    expect(result.current).toBe(true);
+
+    rerender({ pending: 0 });
+    act(() => vi.advanceTimersByTime(400)); // inside the 600ms hold
+    expect(result.current).toBe(true);
+    act(() => vi.advanceTimersByTime(250)); // past it
+    expect(result.current).toBe(false);
   });
 });

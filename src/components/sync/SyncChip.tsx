@@ -31,24 +31,29 @@ function formatSyncTime(ts: number): string {
 }
 
 // Debounce the pending display so sub-second syncs never flash the chip.
-function usePendingDisplay(pending: number): boolean {
+// Keyed on WHETHER the queue is non-empty, not the count: a count change
+// (rapid offline taps, 1→2→3) must not restart the show delay — "~400ms of
+// continuous pending" means continuously non-empty (DESIGN §7).
+// Exported for the timing tests only.
+export function usePendingDisplay(pending: number): boolean {
   const [visible, setVisible] = useState(false);
   const shownAt = useRef(0);
+  const hasPending = pending > 0;
 
   useEffect(() => {
-    if (pending > 0 && !visible) {
+    if (hasPending && !visible) {
       const timer = setTimeout(() => {
         shownAt.current = Date.now();
         setVisible(true);
       }, PENDING_SHOW_DELAY_MS);
       return () => clearTimeout(timer);
     }
-    if (pending === 0 && visible) {
+    if (!hasPending && visible) {
       const remaining = Math.max(0, PENDING_MIN_VISIBLE_MS - (Date.now() - shownAt.current));
       const timer = setTimeout(() => setVisible(false), remaining);
       return () => clearTimeout(timer);
     }
-  }, [pending, visible]);
+  }, [hasPending, visible]);
 
   return visible;
 }
@@ -56,7 +61,13 @@ function usePendingDisplay(pending: number): boolean {
 export function SyncChip({ userId }: { userId: string }) {
   const pending = usePendingCount(userId);
   const status = useQueueStatusStore((s) => s.status);
-  const lastSyncedAt = useQueueStatusStore((s) => s.lastSyncedAt) ?? loadLastSync(userId);
+  // The newer of the in-memory value and the persisted one — another tab's
+  // flush updates only localStorage here, so a plain fallback (store ?? disk)
+  // would pin this tab to its own older timestamp forever once it had set the
+  // store. Not reactive to other tabs' storage writes; the next re-render
+  // (liveQuery/status change) picks it up.
+  const storeLastSync = useQueueStatusStore((s) => s.lastSyncedAt);
+  const lastSyncedAt = Math.max(storeLastSync ?? 0, loadLastSync(userId) ?? 0) || null;
   const showPending = usePendingDisplay(pending);
 
   // During the brief hold after a drain, `pending` is already 0 — keep the
@@ -67,14 +78,24 @@ export function SyncChip({ userId }: { userId: string }) {
 
   const [announcement, setAnnouncement] = useState('');
   const prevPending = useRef(0);
+  // Dead-lettering ALSO empties the queue — announcing "All entries synced"
+  // then would be flatly wrong next to the set-aside toast. Compare deadCount
+  // against its value when this pending episode began.
+  const deadCount = useQueueStatusStore((s) => s.deadCount);
+  const deadAtEpisodeStart = useRef(0);
   useEffect(() => {
     if (pending > 0 && prevPending.current === 0) {
+      deadAtEpisodeStart.current = deadCount;
       setAnnouncement(`${pending} ${entriesWord(pending)} pending sync`);
     } else if (pending === 0 && prevPending.current > 0) {
-      setAnnouncement('All entries synced');
+      setAnnouncement(
+        deadCount > deadAtEpisodeStart.current
+          ? 'Sync finished — some entries could not sync and were set aside'
+          : 'All entries synced',
+      );
     }
     prevPending.current = pending;
-  }, [pending]);
+  }, [pending, deadCount]);
 
   const state = status === 'flushing' ? 'syncing' : status === 'auth' ? 'auth' : 'offline';
   const stateLabel =
