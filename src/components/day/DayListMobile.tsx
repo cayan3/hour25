@@ -198,9 +198,12 @@ const SlotRow = forwardRef<HTMLButtonElement, SlotRowProps>(function SlotRow(
         tabIndex={tabIndex}
         onFocus={onFocus}
         onClick={onOpen}
-        className={`flex min-h-11 w-full touch-manipulation items-stretch text-left text-sm ring-offset-slate-50 focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-offset-2 motion-safe:transition-[background-color] motion-safe:duration-100 dark:ring-offset-slate-900 ${
-          isOpen ? 'z-10 ring-2 ring-inset ring-sky-500' : ''
-        }`}
+        // The focus/open rings live on the slot BLOCK below (group-focus),
+        // not the whole row — ringing the time gutter too read wrong, and a
+        // whole-row ring fought the same-as-previous chip for z-order (Week 5
+        // round 3). outline-none is safe: the block's ring is the visible
+        // replacement.
+        className="group flex min-h-11 w-full touch-manipulation items-stretch text-left text-sm outline-none motion-safe:transition-[background-color] motion-safe:duration-100"
       >
         {/* Right-aligned with a fixed pr: the gap to the slot block is
             identical for "x:xx" and "xx:xx", and the text clears the now bar
@@ -216,9 +219,9 @@ const SlotRow = forwardRef<HTMLButtonElement, SlotRowProps>(function SlotRow(
         </span>
         {entry ? (
           <span
-            className={`flex min-w-0 flex-1 items-center justify-end gap-2 px-3 ${
-              runStart ? 'mt-0.5 rounded-t' : ''
-            } ${runEnd ? 'mb-0.5 rounded-b' : ''}`}
+            className={`flex min-w-0 flex-1 items-center justify-end gap-2 px-3 ring-inset group-focus-visible:ring-2 ${
+              isOpen ? 'ring-2 ring-sky-500' : ''
+            } ${runStart ? 'mt-0.5 rounded-t' : ''} ${runEnd ? 'mb-0.5 rounded-b' : ''}`}
             style={
               label
                 ? {
@@ -248,8 +251,8 @@ const SlotRow = forwardRef<HTMLButtonElement, SlotRowProps>(function SlotRow(
           // dashed and filled slots read as the same-sized cell.
           <span className={`flex flex-1 items-stretch ${chip ? 'mr-36' : ''}`}>
             <span
-              className={`my-0.5 w-full rounded border border-dashed border-slate-300 dark:border-slate-600 ${
-                isHint && !isOpen ? 'ring-2 ring-sky-500' : ''
+              className={`my-0.5 w-full rounded border border-dashed border-slate-300 ring-inset group-focus-visible:ring-2 dark:border-slate-600 ${
+                isOpen ? 'ring-2 ring-sky-500' : isHint ? 'ring-2 ring-sky-500' : ''
               }`}
             />
           </span>
