@@ -47,9 +47,12 @@ export function DayGridDesktop({
   const wasPickerOpen = useRef(false);
 
   const entryBySlot = useMemo(() => new Map(merged.map((e) => [e.slotIndex, e])), [merged]);
-  const segmentsByStart = useMemo(() => {
-    const map = new Map<number, RunSegment>();
-    for (const seg of clipRunsToRows(computeRuns(merged), SLOTS_PER_ROW)) map.set(seg.start, seg);
+  const segmentsByRow = useMemo(() => {
+    const map = new Map<number, RunSegment[]>();
+    for (const seg of clipRunsToRows(computeRuns(merged), SLOTS_PER_ROW)) {
+      const row = Math.floor(seg.start / SLOTS_PER_ROW);
+      map.set(row, [...(map.get(row) ?? []), seg]);
+    }
     return map;
   }, [merged]);
 
@@ -140,7 +143,18 @@ export function DayGridDesktop({
               </div>
             ))}
           </div>
-          <div role="row" className="grid grid-cols-12 gap-0.5">
+          <div role="row" className="relative grid grid-cols-12 gap-0.5">
+            {/* Segment overlays live at ROW level, before (= painted under)
+                the positioned cell buttons — inside a cell they covered the
+                right wall of that cell's own focus ring, since a child paints
+                over its parent's ring shadow. */}
+            {(segmentsByRow.get(row) ?? []).map((seg) => (
+              <SegmentOverlay
+                key={seg.start}
+                segment={seg}
+                label={labelById.get(seg.labelId) ?? null}
+              />
+            ))}
             {Array.from({ length: SLOTS_PER_ROW }, (_, col) => {
               const slotIndex = row * SLOTS_PER_ROW + col;
               return (
@@ -151,7 +165,6 @@ export function DayGridDesktop({
                   }}
                   slotIndex={slotIndex}
                   entry={entryBySlot.get(slotIndex) ?? null}
-                  segment={segmentsByStart.get(slotIndex) ?? null}
                   label={labelFor(entryBySlot.get(slotIndex) ?? null, labelById)}
                   isNow={slotIndex === nowSlot}
                   isHint={slotIndex === hintSlot}
@@ -176,7 +189,6 @@ function labelFor(entry: MergedEntry | null, labelById: Map<string, LabelRow>): 
 interface SlotCellProps {
   slotIndex: number;
   entry: MergedEntry | null;
-  segment: RunSegment | null; // set only on the first slot of a clipped segment
   label: LabelRow | null;
   isNow: boolean;
   isHint: boolean;
@@ -187,7 +199,7 @@ interface SlotCellProps {
 }
 
 const SlotCell = forwardRef<HTMLButtonElement, SlotCellProps>(function SlotCell(
-  { slotIndex, entry, segment, label, isNow, isHint, isOpen, tabIndex, onFocus, onClick },
+  { slotIndex, entry, label, isNow, isHint, isOpen, tabIndex, onFocus, onClick },
   ref,
 ) {
   const filled = entry !== null;
@@ -225,7 +237,6 @@ const SlotCell = forwardRef<HTMLButtonElement, SlotCellProps>(function SlotCell(
             }`
       }`}
     >
-      {segment && label && <SegmentOverlay segment={segment} label={label} />}
       {entry?.note && label && (
         <span
           aria-hidden="true"
@@ -246,18 +257,23 @@ const SlotCell = forwardRef<HTMLButtonElement, SlotCellProps>(function SlotCell(
 });
 
 // The visual body of a merged run segment: background + the label name painted
-// once, spanning the segment's cells (and the 2px gaps between them). Sits
-// under the transparent cell buttons and never intercepts a click — the slot
-// element is what you click (C-41). The name shows as many characters as the
-// segment's width fits (CSS truncation) — no slot-count abbreviation.
-function SegmentOverlay({ segment, label }: { segment: RunSegment; label: LabelRow }) {
+// once, spanning the segment's cells (and the 2px gaps between them). A row-
+// level element painted under the transparent cell buttons; never intercepts
+// a click — the slot element is what you click (C-41). The name shows as many
+// characters as the segment's width fits (CSS truncation).
+function SegmentOverlay({ segment, label }: { segment: RunSegment; label: LabelRow | null }) {
+  if (!label) return null;
+  const col = segment.start % SLOTS_PER_ROW;
   const len = segment.end - segment.start + 1;
+  // One cell = (100% − 11 gaps) / 12 of the row; offsets step by cell + gap.
+  const cellWidth = `(100% - ${(SLOTS_PER_ROW - 1) * GAP_PX}px) / ${SLOTS_PER_ROW}`;
   return (
     <span
       aria-hidden="true"
-      className="pointer-events-none absolute inset-y-0 left-0 flex items-center overflow-hidden rounded px-1 text-xs font-medium"
+      className="pointer-events-none absolute inset-y-0 flex items-center overflow-hidden rounded px-1 text-xs font-medium"
       style={{
-        width: `calc(${len * 100}% + ${(len - 1) * GAP_PX}px)`,
+        left: `calc(${col} * (${cellWidth} + ${GAP_PX}px))`,
+        width: `calc(${len} * (${cellWidth}) + ${(len - 1) * GAP_PX}px)`,
         backgroundColor: label.color,
         color: contrastText(label.color),
       }}
