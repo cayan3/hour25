@@ -1,6 +1,6 @@
 import { offlineDB, type QueuedWrite } from './store';
 import { classifyError } from '../db/errors';
-import { MAX_FLUSH_ATTEMPTS, FLUSH_BATCH_SIZE } from '../constants';
+import { MAX_FLUSH_ATTEMPTS, FLUSH_BATCH_SIZE, DEAD_LETTER_TTL_MS } from '../constants';
 import { useQueueStatusStore } from '../../store/queueStatus';
 import { recordLastSync } from '../lastSync';
 
@@ -154,6 +154,14 @@ async function sendBatch(userId: string, batch: QueuedWrite[], d: FlushDeps): Pr
 async function publishStatus(userId: string, result: FlushResult): Promise<void> {
   const store = useQueueStatusStore.getState();
   store.setStatus(result === 'complete' ? 'idle' : result === 'network' ? 'offline' : 'auth');
+  // Expire stale dead letters before counting — the set-aside list must not
+  // accumulate forever (Week 5). failedAt is indexed; the user scope keeps
+  // this to the same rows flush otherwise touches.
+  await offlineDB.dead
+    .where('failedAt')
+    .below(Date.now() - DEAD_LETTER_TTL_MS)
+    .filter((r) => r.userId === userId)
+    .delete();
   // userId isn't indexed on `dead` (schema: '++id, failedAt'); a filter scan
   // is fine — dead-letters are rare by design.
   store.setDeadCount(await offlineDB.dead.filter((r) => r.userId === userId).count());

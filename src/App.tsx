@@ -124,6 +124,7 @@ export default function App() {
 function AuthenticatedShell({ userId, email }: { userId: string; email: string | null }) {
   const { data: settings } = useSettings(userId);
   const [view, setView] = useState<'today' | 'settings'>('today');
+  const [setAsideReveal, setSetAsideReveal] = useState(0);
 
   if (!settings) {
     return (
@@ -193,9 +194,16 @@ function AuthenticatedShell({ userId, email }: { userId: string; email: string |
       {view === 'today' ? (
         <DayView userId={userId} onOpenSettings={() => setView('settings')} />
       ) : (
-        <SettingsView userId={userId} />
+        <SettingsView userId={userId} revealSetAsideNonce={setAsideReveal} />
       )}
-      <DeadLetterToast onOpenSettings={() => setView('settings')} />
+      <DeadLetterToast
+        onOpenSettings={() => {
+          setView('settings');
+          // Also expand + scroll to the set-aside section — Details used to
+          // be a silent no-op when already on Settings with it collapsed.
+          setSetAsideReveal((n) => n + 1);
+        }}
+      />
     </div>
   );
 }

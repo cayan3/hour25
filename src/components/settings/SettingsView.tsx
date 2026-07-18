@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import { useActiveLabels, useAllLabels } from '../../hooks/useLabels';
 import { useCategories } from '../../hooks/useCategories';
 import { useSettings, useUpdateSettings } from '../../hooks/useSettings';
@@ -12,10 +13,28 @@ import { SetAsidePanel } from '../sync/SetAsidePanel';
 
 // Rarely-used sections collapse by default (Week 5 feedback); the frequent
 // ones stay open. Full information-architecture rework is O-13's job.
-function CollapsedSection({ title, children }: { title: string; children: React.ReactNode }) {
+// Controlled `open` is optional — the set-aside section is forced open when
+// the dead-letter toast's Details points here.
+function CollapsedSection({
+  title,
+  open,
+  onToggle,
+  children,
+}: {
+  title: string;
+  open?: boolean;
+  onToggle?: (open: boolean) => void;
+  children: React.ReactNode;
+}) {
   return (
-    <details className="group">
-      <summary className="cursor-pointer rounded text-lg font-medium text-slate-900 focus-visible:ring-2 focus-visible:ring-offset-2 dark:text-slate-50">
+    <details
+      className="group"
+      open={open}
+      onToggle={(e) => onToggle?.((e.currentTarget as HTMLDetailsElement).open)}
+    >
+      {/* list-none + marker hide: the custom triangle replaces the native
+          disclosure marker rather than doubling it (Week 5 round 3). */}
+      <summary className="cursor-pointer list-none rounded text-lg font-medium text-slate-900 focus-visible:ring-2 focus-visible:ring-offset-2 dark:text-slate-50 [&::-webkit-details-marker]:hidden">
         {title}
         <span aria-hidden="true" className="ml-2 text-sm text-slate-400 group-open:hidden">
           ▸
@@ -29,7 +48,16 @@ function CollapsedSection({ title, children }: { title: string; children: React.
   );
 }
 
-export function SettingsView({ userId }: { userId: string }) {
+export function SettingsView({
+  userId,
+  revealSetAsideNonce = 0,
+}: {
+  userId: string;
+  // Bumped by the dead-letter toast's Details action: expands the set-aside
+  // section and scrolls to it — Details was a silent no-op when the user was
+  // already on Settings with the section collapsed.
+  revealSetAsideNonce?: number;
+}) {
   const activeLabels = useActiveLabels(userId);
   const allLabels = useAllLabels(userId);
   const categories = useCategories(userId);
@@ -37,6 +65,15 @@ export function SettingsView({ userId }: { userId: string }) {
   const updateSettings = useUpdateSettings(userId);
   const [labelNotice, showLabelNotice] = useTransientMessage();
   const [categoryNotice, showCategoryNotice] = useTransientMessage();
+  const [setAsideOpen, setSetAsideOpen] = useState(false);
+  const setAsideRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    if (revealSetAsideNonce > 0) {
+      setSetAsideOpen(true);
+      setAsideRef.current?.scrollIntoView({ block: 'start' });
+    }
+  }, [revealSetAsideNonce]);
 
   return (
     <div className="mx-auto max-w-2xl space-y-8 p-4">
@@ -103,8 +140,8 @@ export function SettingsView({ userId }: { userId: string }) {
         </CollapsedSection>
       </section>
 
-      <section>
-        <CollapsedSection title="Set-aside entries">
+      <section ref={setAsideRef}>
+        <CollapsedSection title="Set-aside entries" open={setAsideOpen} onToggle={setSetAsideOpen}>
           <SetAsidePanel userId={userId} />
         </CollapsedSection>
       </section>
