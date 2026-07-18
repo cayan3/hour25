@@ -73,4 +73,18 @@ describe('AuthBanner', () => {
     act(() => useQueueStatusStore.setState({ status: 'auth' }));
     expect(await screen.findByRole('alert')).toBeTruthy();
   });
+
+  it('stays dismissed across the retry loop’s flushing blips within one episode', async () => {
+    await offlineDB.writes.put(queuedRow(1));
+    useQueueStatusStore.setState({ status: 'auth' });
+    render(<AuthBanner userId={USER} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Dismiss' }));
+    expect(screen.queryByRole('alert')).toBeNull();
+
+    // The revoked-token case: every ~30s retry sets 'flushing' then lands back
+    // on 'auth'. That is the SAME episode — the banner must not re-arm.
+    act(() => useQueueStatusStore.setState({ status: 'flushing' }));
+    act(() => useQueueStatusStore.setState({ status: 'auth' }));
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+  });
 });

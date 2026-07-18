@@ -15,7 +15,11 @@ export function AuthBanner({ userId }: { userId: string }) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (status !== 'auth') setDismissed(false);
+    // An auth episode only genuinely ends on a successful flush ('idle'). The
+    // retry loop blips 'flushing' every ~30s in the revoked-token case (session
+    // present locally, server 401s) — resetting on any non-auth status re-armed
+    // a dismissed banner on every one of those blips.
+    if (status === 'idle') setDismissed(false);
   }, [status]);
 
   if (status !== 'auth' || pending === 0 || dismissed) return null;
