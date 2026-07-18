@@ -93,7 +93,11 @@ export function DayListMobile({
       {Array.from({ length: SLOTS_PER_DAY }, (_, slotIndex) => {
         const entry = entryBySlot.get(slotIndex) ?? null;
         const prevEntry = slotIndex > 0 ? (entryBySlot.get(slotIndex - 1) ?? null) : null;
-        const chip = !entry && prevEntry ? (labelById.get(prevEntry.labelId) ?? null) : null;
+        // labelById is labels-all (it must render history) — but the chip
+        // CREATES assignments, and soft-deleted labels are never selectable
+        // (DESIGN §6), so a deleted previous label offers no chip.
+        const prevLabel = prevEntry ? (labelById.get(prevEntry.labelId) ?? null) : null;
+        const chip = !entry && prevLabel && prevLabel.deleted_at === null ? prevLabel : null;
         // Visual run merging, vertical form (C-41): consecutive same-label
         // rows connect into one apparent block; the name paints once on the
         // topmost row. Every row keeps its own button + accessible name.
