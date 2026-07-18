@@ -10,6 +10,15 @@ import type { Database } from './database.types';
 // for the import path's 500-row batches on slow links. Entry writes are
 // unaffected in substance: flush classifies the abort as network and the
 // queue simply retries later.
+// Known gaps this wrapper does NOT cover:
+// - supabase-js awaits the access token (auth.getSession()) BEFORE calling
+//   this fetch, so a hang inside GoTrueClient's session-refresh path never
+//   starts this clock — see STATUS.md's open bug. That includes flush: its
+//   getSession dep goes through the same layer.
+// - postgrest-js internally retries GET/HEAD/OPTIONS up to 3× (1s/2s/4s
+//   backoff) on fetch rejections, and its abort guard doesn't recognize the
+//   TimeoutError this wrapper produces — a hung READ settles after ~67s
+//   worst case, not 15s. Mutations aren't retried, so 15s holds for writes.
 const REQUEST_TIMEOUT_MS = 15_000;
 
 function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
