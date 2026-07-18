@@ -50,4 +50,13 @@ describe('classifyError', () => {
     expect(classifyError(null)).toBe('network');
     expect(classifyError(undefined)).toBe('network');
   });
+
+  it('never reads a NUMERIC code as a Postgres code — a raw DOMException timeout is network, not permanent', () => {
+    // DOMException carries legacy numeric codes: TimeoutError = 23,
+    // QuotaExceededError = 22. Coerced into the /^(22|23|42)/ test they'd
+    // dead-letter healthy rows on a timeout; only string codes may match.
+    expect(classifyError(new DOMException('signal timed out', 'TimeoutError'))).toBe('network');
+    expect(classifyError(new DOMException('quota', 'QuotaExceededError'))).toBe('network');
+    expect(classifyError({ code: 23 })).toBe('network');
+  });
 });
