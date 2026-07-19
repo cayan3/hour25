@@ -136,6 +136,29 @@ export async function updateLabel(
   return { kind: 'updated', label: data[0] };
 }
 
+// JSON-restore only (SPEC §10): a raw insert that preserves the backup's
+// soft-delete state and skips the restore-or-create flow — the empty-account
+// guard upstream means there is nothing to collide with. Never called from
+// the interactive create paths.
+export async function insertLabelForRestore(
+  userId: string,
+  label: { name: string; color: string; categoryId: string | null; deletedAt: string | null },
+): Promise<LabelRow> {
+  const { data, error } = await supabase
+    .from('labels')
+    .insert({
+      user_id: userId,
+      name: label.name,
+      color: label.color,
+      category_id: label.categoryId,
+      deleted_at: label.deletedAt,
+    })
+    .select()
+    .single();
+  if (error) throw Object.assign(error, { kind: classifyError(error) });
+  return data;
+}
+
 export type RestoreLabelResult =
   | { kind: 'restored'; label: LabelRow }
   // Restoring into a live name collision forces a rename in the same dialog.

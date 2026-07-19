@@ -11,6 +11,7 @@ import { CategoryList } from '../categories/CategoryList';
 import { SleepWindowForm } from './SleepWindowForm';
 import { ExportPanel } from './ExportPanel';
 import { ImportPanel } from './ImportPanel';
+import { RestorePanel } from './RestorePanel';
 import { SetAsidePanel } from '../sync/SetAsidePanel';
 
 // Rarely-used sections collapse by default (Week 5 feedback); the frequent
@@ -157,6 +158,12 @@ export function SettingsView({
       <section>
         <CollapsedSection title="Import from CSV">
           <ImportPanel userId={userId} />
+        </CollapsedSection>
+      </section>
+
+      <section>
+        <CollapsedSection title="Restore from backup">
+          <RestorePanel userId={userId} />
         </CollapsedSection>
       </section>
 

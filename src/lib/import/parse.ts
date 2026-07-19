@@ -90,7 +90,8 @@ function isSheetsHeader(header: string[]): boolean {
 // Calendar validity without new Date() string parsing: parseLocalDate is the
 // one sanctioned string→Date path, and the round-trip catches impossible
 // dates (2026-02-31 rolls over, so it no longer formats back to itself).
-const appDateSchema = z
+// Shared with the JSON-backup schema (restore.ts) — same date discipline.
+export const isoDateSchema = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/)
   .refine((s) => localDateString(parseLocalDate(s)) === s, 'not a real calendar date');
@@ -156,7 +157,7 @@ export function parseImportFile(text: string): ParseImportResult {
 
   if (isAppHeader(header)) {
     return collectDays(rows, (row, rowNumber) => {
-      const date = appDateSchema.safeParse(row[0]);
+      const date = isoDateSchema.safeParse(row[0]);
       if (!date.success) {
         return { error: `Row ${rowNumber}: "${row[0]}" is not a valid YYYY-MM-DD date.` };
       }

@@ -9,7 +9,13 @@ vi.mock('../../../src/lib/supabase', () => ({
   },
 }));
 
-import { createLabel, softDeleteLabel, restoreLabel, updateLabel } from '../../../src/lib/db/labels';
+import {
+  createLabel,
+  insertLabelForRestore,
+  softDeleteLabel,
+  restoreLabel,
+  updateLabel,
+} from '../../../src/lib/db/labels';
 
 const USER = 'user-1';
 
@@ -132,5 +138,18 @@ describe('updateLabel — rename/recolor', () => {
 
   it('throws for an unknown id', async () => {
     await expect(updateLabel(USER, 'does-not-exist', { color: '#000000' })).rejects.toThrow(/no matching label/);
+  });
+});
+
+describe('insertLabelForRestore — JSON restore path', () => {
+  it('preserves the soft-deleted state from the backup instead of resetting it', async () => {
+    const row = await insertLabelForRestore(USER, {
+      name: 'retired habit',
+      color: '#5a5a5a',
+      categoryId: null,
+      deletedAt: '2026-05-01T00:00:00.000Z',
+    });
+    expect(row.deleted_at).toBe('2026-05-01T00:00:00.000Z');
+    expect(row.name).toBe('retired habit');
   });
 });
