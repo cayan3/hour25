@@ -9,6 +9,7 @@ import {
   wakingMinutes,
   localDateString,
   parseLocalDate,
+  addDays,
 } from '../../src/lib/time';
 
 afterAll(() => {
@@ -79,5 +80,26 @@ describe('DST transition dates (C-17): still 48 slots, no special-casing', () =>
   it('slot arithmetic is unaffected by DST — SLOTS_PER_DAY is a fixed constant, never date-derived', () => {
     expect(wakingMinutes(46, 14)).toBe(16 * 60);
     expect(slotIndexToLocalTime(47)).toBe('23:30');
+  });
+});
+
+describe('addDays', () => {
+  it('moves forward and backward across month boundaries', () => {
+    expect(addDays('2026-07-31', 1)).toBe('2026-08-01');
+    expect(addDays('2026-08-01', -1)).toBe('2026-07-31');
+  });
+
+  it('crosses a year boundary', () => {
+    expect(addDays('2026-12-31', 1)).toBe('2027-01-01');
+  });
+
+  it('lands on the intended calendar day across a DST spring-forward', () => {
+    // 2026-03-08 is the US spring-forward: that day is only 23 hours long, so
+    // millisecond arithmetic would land back on the 8th.
+    expect(addDays('2026-03-08', 1)).toBe('2026-03-09');
+  });
+
+  it('returns the same date for a zero delta', () => {
+    expect(addDays('2026-07-15', 0)).toBe('2026-07-15');
   });
 });

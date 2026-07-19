@@ -5,7 +5,7 @@ import { useCategories } from '../../hooks/useCategories';
 import { useFillSleep, useSlotActions } from '../../hooks/useSlotActions';
 import { useIsDesktop } from '../../hooks/useMediaQuery';
 import { useDayStore } from '../../store/day';
-import { localDateString, parseLocalDate } from '../../lib/time';
+import { addDays, localDateString, parseLocalDate } from '../../lib/time';
 import { CHUNK_MINUTES, SLOTS_PER_DAY } from '../../lib/constants';
 import { loadMru } from '../../lib/mru';
 import { DayGridDesktop } from './DayGridDesktop';
@@ -14,12 +14,6 @@ import { LabelPicker } from './LabelPicker';
 import { UndoSnackbar } from './UndoSnackbar';
 
 const HINT_KEY_PREFIX = 'first-slot-hint-dismissed:';
-
-function addDays(date: string, delta: number): string {
-  const d = parseLocalDate(date);
-  d.setDate(d.getDate() + delta);
-  return localDateString(d);
-}
 
 // Ticks every 30s so the now marker tracks the clock while the app sits open.
 function useNowSlot(date: string): number | null {

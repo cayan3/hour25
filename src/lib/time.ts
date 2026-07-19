@@ -31,3 +31,12 @@ export function parseLocalDate(dateStr: string): Date {
   const [y, m, d] = dateStr.split('-').map(Number);
   return new Date(y, m - 1, d);
 }
+
+// Day arithmetic on YYYY-MM-DD strings, via the sanctioned parse. Local
+// midnight ± n days lands on the intended calendar day even across a DST
+// boundary, since setDate works in calendar terms, not milliseconds.
+export function addDays(dateStr: string, delta: number): string {
+  const d = parseLocalDate(dateStr);
+  d.setDate(d.getDate() + delta);
+  return localDateString(d);
+}
