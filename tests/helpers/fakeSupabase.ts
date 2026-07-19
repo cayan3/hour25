@@ -12,10 +12,15 @@ interface RunResult {
 
 type Filter = (row: FakeRow) => boolean;
 
+// Mirrors Supabase's default PostgREST `max-rows` setting: a select response
+// never carries more rows than this, whatever the query asked for. Callers
+// reading potentially-large ranges must paginate via .range().
+export const FAKE_MAX_ROWS = 1000;
+
 class FakeQuery implements PromiseLike<RunResult> {
   private filters: Filter[] = [];
-  private orderCol: string | null = null;
-  private orderAsc = true;
+  private orderCols: { col: string; asc: boolean }[] = [];
+  private rangeBounds: { from: number; to: number } | null = null;
   private wantSingle = false;
   private wantMaybeSingle = false;
 
@@ -39,9 +44,23 @@ class FakeQuery implements PromiseLike<RunResult> {
     return this;
   }
 
+  gte(col: string, val: unknown): this {
+    this.filters.push((row) => String(row[col]) >= String(val));
+    return this;
+  }
+
+  lte(col: string, val: unknown): this {
+    this.filters.push((row) => String(row[col]) <= String(val));
+    return this;
+  }
+
   order(col: string, opts?: { ascending?: boolean }): this {
-    this.orderCol = col;
-    this.orderAsc = opts?.ascending ?? true;
+    this.orderCols.push({ col, asc: opts?.ascending ?? true });
+    return this;
+  }
+
+  range(from: number, to: number): this {
+    this.rangeBounds = { from, to };
     return this;
   }
 
@@ -72,13 +91,18 @@ class FakeQuery implements PromiseLike<RunResult> {
       this.table.rows = this.table.rows.filter((row) => !matched.includes(row));
     }
 
-    if (this.orderCol) {
-      const col = this.orderCol;
+    if (this.orderCols.length) {
       matched = [...matched].sort((a, b) => {
-        const av = String(a[col]);
-        const bv = String(b[col]);
-        if (av === bv) return 0;
-        return (av < bv ? -1 : 1) * (this.orderAsc ? 1 : -1);
+        for (const { col, asc } of this.orderCols) {
+          const av = a[col];
+          const bv = b[col];
+          if (av === bv) continue;
+          const cmp = typeof av === 'number' && typeof bv === 'number'
+            ? av - bv
+            : String(av) < String(bv) ? -1 : 1;
+          return cmp * (asc ? 1 : -1);
+        }
+        return 0;
       });
     }
 
@@ -130,6 +154,10 @@ class FakeQuery implements PromiseLike<RunResult> {
   }
 
   private finish(matched: FakeRow[]): RunResult {
+    if (this.op === 'select') {
+      if (this.rangeBounds) matched = matched.slice(this.rangeBounds.from, this.rangeBounds.to + 1);
+      if (matched.length > FAKE_MAX_ROWS) matched = matched.slice(0, FAKE_MAX_ROWS);
+    }
     if (this.wantSingle) {
       if (matched.length !== 1) return { data: null, error: { code: 'PGRST116', message: 'no rows returned' } };
       return { data: matched[0], error: null };

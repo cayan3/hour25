@@ -29,22 +29,35 @@ export const upsertEntry = (userId: string, w: EntryWrite): Promise<void> => ups
 export const deleteEntry = (userId: string, date: string, slotIndex: number): Promise<void> =>
   upsertEntries(userId, [{ date, slotIndex, op: 'delete', labelId: null }]);
 
+// PostgREST caps every response at the project's max-rows setting (Supabase
+// default: 1000), silently — no error, just a short result. A single day is
+// never near the cap, but whole-account ranges (export/backup, import
+// preview) blow straight past it, so every read pages. Must not exceed the
+// server-side cap, or a "full" page would be indistinguishable from a capped
+// one and the loop would stop early.
+const ENTRY_PAGE_SIZE = 1000;
+
 // Bare entries — no label embed (C-34). Labels resolve client-side from ['labels-all'].
 export async function getEntriesForRange(
   userId: string,
   start: string,
   end: string,
 ): Promise<ServerEntryRow[]> {
-  const { data, error } = await supabase
-    .from('time_entries')
-    .select('date, slot_index, label_id, note, chunk_minutes')
-    .eq('user_id', userId)
-    .gte('date', start)
-    .lte('date', end)
-    .order('date')
-    .order('slot_index');
-  if (error) throw Object.assign(error, { kind: classifyError(error) });
-  return data;
+  const rows: ServerEntryRow[] = [];
+  for (let offset = 0; ; offset += ENTRY_PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from('time_entries')
+      .select('date, slot_index, label_id, note, chunk_minutes')
+      .eq('user_id', userId)
+      .gte('date', start)
+      .lte('date', end)
+      .order('date')
+      .order('slot_index')
+      .range(offset, offset + ENTRY_PAGE_SIZE - 1);
+    if (error) throw Object.assign(error, { kind: classifyError(error) });
+    rows.push(...data);
+    if (data.length < ENTRY_PAGE_SIZE) return rows;
+  }
 }
 
 export async function getEarliestEntryDate(userId: string): Promise<string | null> {
