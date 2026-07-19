@@ -13,6 +13,14 @@ export const queryClient = new QueryClient({
       refetchOnWindowFocus: true,
       retry: 1,
     },
+    // 'always' opts mutations out of React Query's offline pausing: with the
+    // 'online' default, going offline paused every mutation before its
+    // mutationFn ran — Settings/label/category saves froze with no error, then
+    // silently replayed on reconnect. These writes are online-only by design
+    // and must fail fast into their catch handlers instead. Queries keep the
+    // pausing default on purpose: offline reads serve the persisted cache and
+    // resume refetching on reconnect rather than flashing error states.
+    mutations: { networkMode: 'always' },
   },
 });
 

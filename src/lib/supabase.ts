@@ -2,19 +2,20 @@ import { createClient } from '@supabase/supabase-js';
 import type { Database } from './database.types';
 
 // Every request times out instead of hanging: supabase-js sets no fetch
-// timeout, so on a flaky/offline connection (especially mobile) an awaited
-// mutation could pend indefinitely — Settings buttons froze mid-press with no
-// error and no way for the C-56 catch paths to ever run (Week 5 feedback).
-// An abort rejects the promise, classifyError reads it as 'network', and the
-// existing per-callsite handlers surface a visible message. 15s leaves slack
-// for the import path's 500-row batches on slow links. Entry writes are
-// unaffected in substance: flush classifies the abort as network and the
-// queue simply retries later.
+// timeout, so on a flaky connection (especially mobile) an awaited request
+// could pend indefinitely. An abort rejects the promise, classifyError reads
+// it as 'network', and the existing per-callsite handlers surface a visible
+// message. 15s leaves slack for the import path's 500-row batches on slow
+// links. Entry writes are unaffected in substance: flush classifies the
+// abort as network and the queue simply retries later.
+// Note: the hard-offline "Settings buttons freeze" symptom was never this
+// fetch hanging — React Query pauses mutations while offline by default, so
+// no request was ever issued; see the networkMode default in queryClient.ts.
 // Known gaps this wrapper does NOT cover:
 // - supabase-js awaits the access token (auth.getSession()) BEFORE calling
 //   this fetch, so a hang inside GoTrueClient's session-refresh path never
-//   starts this clock — see STATUS.md's open bug. That includes flush: its
-//   getSession dep goes through the same layer.
+//   starts this clock. That includes flush: its getSession dep goes through
+//   the same layer.
 // - postgrest-js internally retries GET/HEAD/OPTIONS up to 3× (1s/2s/4s
 //   backoff) on fetch rejections, and its abort guard doesn't recognize the
 //   TimeoutError this wrapper produces — a hung READ settles after ~67s
