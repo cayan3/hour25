@@ -30,3 +30,10 @@ export async function enqueueMany(userId: string, ws: EntryWrite[]): Promise<voi
   );
   requestFlush(userId); // fire-and-forget; requestFlush never rejects
 }
+
+// One-shot read of everything this user still has queued, for the whole-account
+// overlay that export and backup need. A filter scan, not a compound-key range:
+// the queue is small by design, and the range form trips fake-indexeddb.
+export function listPendingWrites(userId: string) {
+  return offlineDB.writes.filter((w) => w.userId === userId).toArray();
+}

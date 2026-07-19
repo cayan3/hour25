@@ -59,6 +59,20 @@ export async function getEarliestEntryDate(userId: string): Promise<string | nul
   return data?.date ?? null;
 }
 
+// Pairs with getEarliestEntryDate to bound a whole-account read (export /
+// backup) without assuming today is the last day — future slots are loggable.
+export async function getLatestEntryDate(userId: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('time_entries')
+    .select('date')
+    .eq('user_id', userId)
+    .order('date', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw Object.assign(error, { kind: classifyError(error) });
+  return data?.date ?? null;
+}
+
 export interface DirectEntryRow {
   date: string;
   slotIndex: number;

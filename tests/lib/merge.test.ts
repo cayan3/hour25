@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mergePending, type ServerEntryRow } from '../../src/lib/merge';
+import { mergePending, mergePendingAllDates, type ServerEntryRow } from '../../src/lib/merge';
 import type { QueuedWrite } from '../../src/lib/offline/store';
 
 const DATE = '2026-07-15';
@@ -58,5 +58,43 @@ describe('mergePending', () => {
     const pending = [pendingRow({ slotIndex: 0, labelId: 'earliest' })];
     const result = mergePending(server, pending);
     expect(result.map((r) => r.slotIndex)).toEqual([0, 1, 2]);
+  });
+});
+
+describe('mergePendingAllDates', () => {
+  it('applies the overlay per date and returns entries sorted by date then slot', () => {
+    const result = mergePendingAllDates(
+      [
+        { date: '2026-07-16', slot_index: 5, label_id: 'a', note: null, chunk_minutes: 30 },
+        { date: '2026-07-15', slot_index: 3, label_id: 'b', note: null, chunk_minutes: 30 },
+      ],
+      [pendingRow({ date: '2026-07-15', slotIndex: 1, labelId: 'c' })],
+    );
+    expect(result.map((r) => [r.date, r.slotIndex])).toEqual([
+      ['2026-07-15', 1],
+      ['2026-07-15', 3],
+      ['2026-07-16', 5],
+    ]);
+  });
+
+  it('keeps a pending delete from one date out without touching another date', () => {
+    const result = mergePendingAllDates(
+      [
+        { date: '2026-07-15', slot_index: 3, label_id: 'b', note: null, chunk_minutes: 30 },
+        { date: '2026-07-16', slot_index: 3, label_id: 'b', note: null, chunk_minutes: 30 },
+      ],
+      [pendingRow({ date: '2026-07-15', slotIndex: 3, op: 'delete' })],
+    );
+    expect(result.map((r) => r.date)).toEqual(['2026-07-16']);
+  });
+
+  it('includes a date the server has never seen', () => {
+    const result = mergePendingAllDates(
+      [],
+      [pendingRow({ date: '2026-07-20', slotIndex: 8, labelId: 'offline-only' })],
+    );
+    expect(result).toEqual([
+      { date: '2026-07-20', slotIndex: 8, labelId: 'offline-only', note: null, chunkMinutes: 30 },
+    ]);
   });
 });

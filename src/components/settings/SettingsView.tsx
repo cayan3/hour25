@@ -9,6 +9,7 @@ import { DeletedLabelsPanel } from '../labels/DeletedLabelsPanel';
 import { CategoryCreateForm } from '../categories/CategoryCreateForm';
 import { CategoryList } from '../categories/CategoryList';
 import { SleepWindowForm } from './SleepWindowForm';
+import { ExportPanel } from './ExportPanel';
 import { SetAsidePanel } from '../sync/SetAsidePanel';
 
 // Rarely-used sections collapse by default (Week 5 feedback); the frequent
@@ -143,6 +144,12 @@ export function SettingsView({
       <section>
         <CollapsedSection title="Deleted labels">
           <DeletedLabelsPanel userId={userId} allLabels={allLabels.data ?? []} />
+        </CollapsedSection>
+      </section>
+
+      <section>
+        <CollapsedSection title="Backup & export">
+          <ExportPanel userId={userId} />
         </CollapsedSection>
       </section>
 
