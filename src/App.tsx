@@ -7,6 +7,7 @@ import { initOfflineSync } from './lib/offline/sync';
 import { queryClient } from './lib/queryClient';
 import { SignInView } from './components/SignInView';
 import { ThemeToggle } from './components/ThemeToggle';
+import { UpdateToast } from './components/UpdateToast';
 import { SyncChip } from './components/sync/SyncChip';
 import { AuthBanner } from './components/sync/AuthBanner';
 import { DeadLetterToast } from './components/sync/DeadLetterToast';
@@ -106,19 +107,21 @@ export default function App() {
     return initOfflineSync(() => (authRef.current.status === 'signed-in' ? authRef.current.userId : null));
   }, []);
 
-  if (auth.status === 'loading') {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 dark:bg-slate-900">
-        <p className="text-slate-500 dark:text-slate-400">Loading…</p>
-      </div>
-    );
-  }
-
-  if (auth.status === 'signed-out') {
-    return <SignInView />;
-  }
-
-  return <AuthenticatedShell userId={auth.userId} email={auth.email} />;
+  return (
+    <>
+      {auth.status === 'loading' && (
+        <div className="flex min-h-screen items-center justify-center bg-slate-50 dark:bg-slate-900">
+          <p className="text-slate-500 dark:text-slate-400">Loading…</p>
+        </div>
+      )}
+      {auth.status === 'signed-out' && <SignInView />}
+      {auth.status === 'signed-in' && <AuthenticatedShell userId={auth.userId} email={auth.email} />}
+      {/* Outside the auth branches: a waiting update is worth offering on the
+          sign-in screen too, and remounting the toast on sign-in would drop a
+          prompt the user had already dismissed. */}
+      <UpdateToast />
+    </>
+  );
 }
 
 function AuthenticatedShell({ userId, email }: { userId: string; email: string | null }) {
