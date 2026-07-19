@@ -197,6 +197,21 @@ export class FakeTable {
     return new FakeQuery(this, 'insert', payload);
   }
 
+  // Merge-on-conflict, the way PostgREST's ?on_conflict= upsert behaves:
+  // a row matching an existing one on every conflict column replaces it.
+  upsert(payload: FakeRow | FakeRow[], opts?: { onConflict?: string }): PromiseLike<RunResult> {
+    const rows = Array.isArray(payload) ? payload : [payload];
+    const conflictCols = (opts?.onConflict ?? '').split(',').map((c) => c.trim()).filter(Boolean);
+    for (const row of rows) {
+      const existing = conflictCols.length
+        ? this.rows.find((r) => conflictCols.every((col) => r[col] === row[col]))
+        : undefined;
+      if (existing) Object.assign(existing, row);
+      else this.rows.push({ id: `id-${this.nextId()}`, ...row });
+    }
+    return Promise.resolve({ data: null, error: null });
+  }
+
   update(payload: FakeRow): FakeQuery {
     return new FakeQuery(this, 'update', payload);
   }

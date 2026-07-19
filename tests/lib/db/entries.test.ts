@@ -9,7 +9,8 @@ vi.mock('../../../src/lib/supabase', () => ({
   },
 }));
 
-import { getEntriesForRange } from '../../../src/lib/db/entries';
+import { bulkUpsertDirect, getEntriesForRange } from '../../../src/lib/db/entries';
+import { IMPORT_BATCH_SIZE } from '../../../src/lib/constants';
 
 const USER = 'user-1';
 
@@ -60,5 +61,40 @@ describe('getEntriesForRange — pagination past the PostgREST max-rows cap', ()
     const rows = await getEntriesForRange(USER, '2026-03-02', '2026-03-03');
     expect(rows).toHaveLength(80);
     expect(rows.every((r) => r.date === '2026-03-02' || r.date === '2026-03-03')).toBe(true);
+  });
+});
+
+describe('bulkUpsertDirect — batching and progress (C-36)', () => {
+  beforeEach(() => {
+    entriesTable = new FakeTable([]);
+  });
+
+  function importRows(count: number) {
+    // Unique (date, slot) pairs: 48 slots per day, days counting up.
+    return Array.from({ length: count }, (_, i) => ({
+      date: `2026-01-${String(Math.floor(i / 48) + 1).padStart(2, '0')}`,
+      slotIndex: i % 48,
+      labelId: 'label-1',
+    }));
+  }
+
+  it('writes every row and reports progress once per batch', async () => {
+    const seen: [number, number][] = [];
+    const total = IMPORT_BATCH_SIZE + 40;
+    await bulkUpsertDirect(USER, importRows(total), (done, of) => seen.push([done, of]));
+    expect(entriesTable.rows).toHaveLength(total);
+    expect(seen).toEqual([
+      [IMPORT_BATCH_SIZE, total],
+      [total, total],
+    ]);
+  });
+
+  it('replaces an existing entry on the same (user, date, slot) key', async () => {
+    entriesTable = new FakeTable([
+      { user_id: USER, date: '2026-01-01', slot_index: 0, label_id: 'old', note: 'kept?', chunk_minutes: 30 },
+    ]);
+    await bulkUpsertDirect(USER, [{ date: '2026-01-01', slotIndex: 0, labelId: 'new' }]);
+    expect(entriesTable.rows).toHaveLength(1);
+    expect(entriesTable.rows[0]).toMatchObject({ label_id: 'new', note: null });
   });
 });

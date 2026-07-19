@@ -97,7 +97,14 @@ export interface DirectEntryRow {
 // The single sanctioned exception to the write-ahead invariant (C-36): online-only
 // direct writes for CSV/JSON import, batched at IMPORT_BATCH_SIZE. Never called
 // from the logging UI — enqueueMany/upsertEntries is the only path there.
-export async function bulkUpsertDirect(userId: string, rows: DirectEntryRow[]): Promise<void> {
+// onProgress fires after each confirmed batch, feeding the import progress bar;
+// a mid-run failure therefore leaves everything up to the last report committed,
+// which is what makes "re-run the import to resume" safe to say.
+export async function bulkUpsertDirect(
+  userId: string,
+  rows: DirectEntryRow[],
+  onProgress?: (done: number, total: number) => void,
+): Promise<void> {
   for (let i = 0; i < rows.length; i += IMPORT_BATCH_SIZE) {
     const batch = rows.slice(i, i + IMPORT_BATCH_SIZE).map((r) => ({
       user_id: userId,
@@ -111,5 +118,6 @@ export async function bulkUpsertDirect(userId: string, rows: DirectEntryRow[]): 
       .from('time_entries')
       .upsert(batch, { onConflict: 'user_id,date,slot_index' });
     if (error) throw Object.assign(error, { kind: classifyError(error) });
+    onProgress?.(Math.min(i + IMPORT_BATCH_SIZE, rows.length), rows.length);
   }
 }
