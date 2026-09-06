@@ -10,8 +10,13 @@ import { mergePending, type MergedEntry } from '../lib/merge';
 // read surface renders the merge of the persisted server cache and the live
 // pending queue, so a tap is visible instantly and survives restart/offline.
 export function useDayEntries(userId: string, date: string): MergedEntry[] {
+  // userId is in the key, not just the queryFn: the cache is persisted to
+  // IndexedDB and shared by every account that signs in on this browser. An
+  // unscoped key hands the previous user's day to the next one — visibly,
+  // since useQuery returns cached data while it refetches, and indefinitely
+  // if the new user is offline (queries keep the pausing network mode).
   const server = useQuery({
-    queryKey: ['entries', date],
+    queryKey: ['entries', userId, date],
     queryFn: () => getEntriesForRange(userId, date, date),
     staleTime: 60_000,
   });

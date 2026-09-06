@@ -94,6 +94,12 @@ export default function App() {
       const next = toAuthState(session);
       setAuth(next);
       if (event === 'SIGNED_IN' && next.status === 'signed-in') bootstrapUserSettings(next.userId);
+      // Leave no server data behind for the next account on a shared browser.
+      // Secondary to the user-scoped query keys, not a replacement for them:
+      // a user who just closes the tab never fires SIGNED_OUT. The Dexie queue
+      // is deliberately untouched — unsent writes belong to the user, not the
+      // session, and must survive until they flush.
+      if (event === 'SIGNED_OUT') queryClient.clear();
     });
 
     return () => {

@@ -21,7 +21,7 @@ async function getSession(): Promise<FlushSession | null> {
 // truth written after a 2xx, not optimistic state: there is nothing to roll
 // back. Days with no cached query are skipped — the drain invalidation
 // refetches them. The updater form never creates a query that doesn't exist.
-function patchEntriesCache(rows: QueuedWrite[]): void {
+function patchEntriesCache(userId: string, rows: QueuedWrite[]): void {
   const byDate = new Map<string, QueuedWrite[]>();
   for (const r of rows) {
     const list = byDate.get(r.date) ?? [];
@@ -29,7 +29,7 @@ function patchEntriesCache(rows: QueuedWrite[]): void {
     byDate.set(r.date, list);
   }
   for (const [date, dateRows] of byDate) {
-    queryClient.setQueryData<ServerEntryRow[]>(['entries', date], (old) => {
+    queryClient.setQueryData<ServerEntryRow[]>(['entries', userId, date], (old) => {
       if (!old) return old;
       const bySlot = new Map(old.map((e) => [e.slot_index, e]));
       for (const r of dateRows) {
@@ -46,8 +46,8 @@ function patchEntriesCache(rows: QueuedWrite[]): void {
   }
 }
 
-function removeEntriesFromCache(date: string, slotIndices: number[]): void {
-  queryClient.setQueryData<ServerEntryRow[]>(['entries', date], (old) =>
+function removeEntriesFromCache(userId: string, date: string, slotIndices: number[]): void {
+  queryClient.setQueryData<ServerEntryRow[]>(['entries', userId, date], (old) =>
     old ? old.filter((e) => !slotIndices.includes(e.slot_index)) : old,
   );
 }
@@ -63,7 +63,7 @@ async function sendUpsertBatch(userId: string, rows: QueuedWrite[]): Promise<voi
   }));
   const { error } = await supabase.from('time_entries').upsert(payload, { onConflict: 'user_id,date,slot_index' });
   if (error) throw error;
-  patchEntriesCache(rows);
+  patchEntriesCache(userId, rows);
 }
 
 async function sendDeleteBatch(userId: string, date: string, slotIndices: number[]): Promise<void> {
@@ -74,7 +74,7 @@ async function sendDeleteBatch(userId: string, date: string, slotIndices: number
     .eq('date', date)
     .in('slot_index', slotIndices);
   if (error) throw error;
-  removeEntriesFromCache(date, slotIndices);
+  removeEntriesFromCache(userId, date, slotIndices);
 }
 
 // §7.5: invalidate the ['entries'] prefix — never a specific key. Fired once

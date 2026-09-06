@@ -120,24 +120,24 @@ describe('configureSupabaseFlush — sendDeleteBatch', () => {
 
 describe('configureSupabaseFlush — C-62 confirmed-row cache patching', () => {
   it('folds a confirmed upsert into the cached day so the drain never flickers', async () => {
-    queryClient.setQueryData<ServerEntryRow[]>(['entries', '2026-07-15'], [serverRow(1)]);
+    queryClient.setQueryData<ServerEntryRow[]>(['entries', USER, '2026-07-15'], [serverRow(1)]);
     const deps = vi.mocked(configureFlush).mock.calls.at(-1)![0];
 
     await deps.sendUpsertBatch(USER, [row({ slotIndex: 3, labelId: 'label-new', note: 'hi' })]);
 
-    expect(queryClient.getQueryData(['entries', '2026-07-15'])).toEqual([
+    expect(queryClient.getQueryData(['entries', USER, '2026-07-15'])).toEqual([
       serverRow(1),
       { date: '2026-07-15', slot_index: 3, label_id: 'label-new', note: 'hi', chunk_minutes: 30 },
     ]);
   });
 
   it('replaces an existing cached slot instead of duplicating it, keeping slot order', async () => {
-    queryClient.setQueryData<ServerEntryRow[]>(['entries', '2026-07-15'], [serverRow(1), serverRow(5)]);
+    queryClient.setQueryData<ServerEntryRow[]>(['entries', USER, '2026-07-15'], [serverRow(1), serverRow(5)]);
     const deps = vi.mocked(configureFlush).mock.calls.at(-1)![0];
 
     await deps.sendUpsertBatch(USER, [row({ slotIndex: 1, labelId: 'label-replaced' })]);
 
-    expect(queryClient.getQueryData(['entries', '2026-07-15'])).toEqual([
+    expect(queryClient.getQueryData(['entries', USER, '2026-07-15'])).toEqual([
       { date: '2026-07-15', slot_index: 1, label_id: 'label-replaced', note: null, chunk_minutes: 30 },
       serverRow(5),
     ]);
@@ -148,25 +148,54 @@ describe('configureSupabaseFlush — C-62 confirmed-row cache patching', () => {
 
     await deps.sendUpsertBatch(USER, [row({ slotIndex: 3, date: '2026-07-14' })]);
 
-    expect(queryClient.getQueryData(['entries', '2026-07-14'])).toBeUndefined();
+    expect(queryClient.getQueryData(['entries', USER, '2026-07-14'])).toBeUndefined();
   });
 
   it('removes confirmed deletes from the cached day', async () => {
-    queryClient.setQueryData<ServerEntryRow[]>(['entries', '2026-07-15'], [serverRow(1), serverRow(2), serverRow(5)]);
+    queryClient.setQueryData<ServerEntryRow[]>(['entries', USER, '2026-07-15'], [serverRow(1), serverRow(2), serverRow(5)]);
     const deps = vi.mocked(configureFlush).mock.calls.at(-1)![0];
 
     await deps.sendDeleteBatch(USER, '2026-07-15', [1, 2]);
 
-    expect(queryClient.getQueryData(['entries', '2026-07-15'])).toEqual([serverRow(5)]);
+    expect(queryClient.getQueryData(['entries', USER, '2026-07-15'])).toEqual([serverRow(5)]);
   });
 
   it('does not patch the cache when the send fails', async () => {
-    queryClient.setQueryData<ServerEntryRow[]>(['entries', '2026-07-15'], [serverRow(1)]);
+    queryClient.setQueryData<ServerEntryRow[]>(['entries', USER, '2026-07-15'], [serverRow(1)]);
     upsertSpy.mockResolvedValueOnce({ error: { code: '23505' } } as never);
     const deps = vi.mocked(configureFlush).mock.calls.at(-1)![0];
 
     await expect(deps.sendUpsertBatch(USER, [row({ slotIndex: 3 })])).rejects.toBeTruthy();
 
-    expect(queryClient.getQueryData(['entries', '2026-07-15'])).toEqual([serverRow(1)]);
+    expect(queryClient.getQueryData(['entries', USER, '2026-07-15'])).toEqual([serverRow(1)]);
+  });
+});
+
+// The bug this guards: the key was ['entries', date] with no user in it, and
+// the cache is persisted to IndexedDB per origin — so on a shared browser one
+// account's confirmed rows landed in the day the next account would read.
+describe('configureSupabaseFlush — per-user cache isolation', () => {
+  it('leaves another user\u2019s cached day untouched on a confirmed upsert', async () => {
+    queryClient.setQueryData<ServerEntryRow[]>(['entries', 'user-2', '2026-07-15'], [serverRow(1)]);
+    const deps = vi.mocked(configureFlush).mock.calls.at(-1)![0];
+
+    await deps.sendUpsertBatch(USER, [row({ slotIndex: 3, labelId: 'label-new' })]);
+
+    expect(queryClient.getQueryData(['entries', 'user-2', '2026-07-15'])).toEqual([serverRow(1)]);
+  });
+
+  it('leaves another user\u2019s cached day untouched on a confirmed delete', async () => {
+    queryClient.setQueryData<ServerEntryRow[]>(
+      ['entries', 'user-2', '2026-07-15'],
+      [serverRow(1), serverRow(2)],
+    );
+    const deps = vi.mocked(configureFlush).mock.calls.at(-1)![0];
+
+    await deps.sendDeleteBatch(USER, '2026-07-15', [1, 2]);
+
+    expect(queryClient.getQueryData(['entries', 'user-2', '2026-07-15'])).toEqual([
+      serverRow(1),
+      serverRow(2),
+    ]);
   });
 });
