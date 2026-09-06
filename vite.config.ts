@@ -50,7 +50,12 @@ export default defineConfig(({ mode }) => {
         },
       }),
     ],
-    server: { allowedHosts },
+    // host: true binds 0.0.0.0 *and* [::], not just the first address Node
+    // resolves for 'localhost'. Node 17+ resolves localhost to ::1 first, so
+    // the default bound IPv6-only and any browser that tried 127.0.0.1 got
+    // connection-refused. Also removes the need for a --host flag when testing
+    // from a phone on the LAN (see PHONE-TESTING.md).
+    server: { host: true, allowedHosts },
     // Two test projects: lib/queue tests stay in the fast node environment;
     // component tests (tests/components/ only) run under jsdom with Testing
     // Library. Both need fake-indexeddb (Dexie in Node/jsdom).
