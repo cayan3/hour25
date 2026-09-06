@@ -13,6 +13,8 @@ import { ExportPanel } from './ExportPanel';
 import { ImportPanel } from './ImportPanel';
 import { RestorePanel } from './RestorePanel';
 import { SetAsidePanel } from '../sync/SetAsidePanel';
+import { FeedbackPanel } from './FeedbackPanel';
+import { advancedToolsEnabled } from '../../lib/advanced';
 
 // Rarely-used sections collapse by default (Week 5 feedback); the frequent
 // ones stay open. Full information-architecture rework is O-13's job.
@@ -73,6 +75,7 @@ export function SettingsView({
   const [labelNotice, showLabelNotice] = useTransientMessage();
   const [categoryNotice, showCategoryNotice] = useTransientMessage();
   const [setAsideOpen, setSetAsideOpen] = useState(false);
+  const advanced = advancedToolsEnabled();
   const setAsideRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
@@ -150,16 +153,18 @@ export function SettingsView({
       </section>
 
       <section>
-        <CollapsedSection title="Backup & export">
+        <CollapsedSection title="Backup">
           <ExportPanel userId={userId} />
         </CollapsedSection>
       </section>
 
-      <section>
-        <CollapsedSection title="Import from CSV">
-          <ImportPanel userId={userId} />
-        </CollapsedSection>
-      </section>
+      {advanced && (
+        <section>
+          <CollapsedSection title="Import from CSV (advanced)">
+            <ImportPanel userId={userId} />
+          </CollapsedSection>
+        </section>
+      )}
 
       <section>
         <CollapsedSection title="Restore from backup">
@@ -171,6 +176,15 @@ export function SettingsView({
         <CollapsedSection title="Set-aside entries" open={setAsideOpen} onToggle={setSetAsideOpen}>
           <SetAsidePanel userId={userId} />
         </CollapsedSection>
+      </section>
+
+      {/* Not collapsed: a feedback channel nobody can find is not a feedback
+          channel, and this is the whole reporting path for non-technical users. */}
+      <section>
+        <h2 className="text-lg font-medium text-slate-900 dark:text-slate-50">Feedback</h2>
+        <div className="mt-3">
+          <FeedbackPanel userId={userId} />
+        </div>
       </section>
     </div>
   );
