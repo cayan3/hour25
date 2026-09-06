@@ -1,9 +1,9 @@
 import { z } from 'zod';
 import { SLOTS_PER_DAY } from './constants';
 
-// Zod validates exactly three surfaces (CLAUDE.md): CSV import rows, JSON
-// backup files, and user-facing forms. These are the label/category/settings
-// forms.
+// Zod validates exactly three surfaces: CSV import rows, JSON backup files,
+// and user-facing forms — never db helpers or internal call paths, which
+// trust their callers. These are the label/category/settings forms.
 
 const hexColor = z
   .string()

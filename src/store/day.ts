@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { localDateString } from '../lib/time';
 
-// UI state only (CLAUDE.md): the day being viewed, which slot's picker is
+// UI state only: the day being viewed, which slot's picker is
 // open, the single-level undo action (C-30), and the transient "same as
 // previous" chip target. Entry data itself never lives here — it's rendered
 // from the server cache + pending overlay (useDayEntries).

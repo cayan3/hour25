@@ -97,7 +97,7 @@ export const isoDateSchema = z
   .refine((s) => localDateString(parseLocalDate(s)) === s, 'not a real calendar date');
 
 // Col B of the sheets format: `MM/DD/YYYY`, parsed with that exact format —
-// never via new Date() (C-50 / CLAUDE.md).
+// never via new Date() (C-50).
 const sheetsDateSchema = z
   .string()
   .regex(/^\d{1,2}\/\d{1,2}\/\d{4}$/)
