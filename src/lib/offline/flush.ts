@@ -1,6 +1,7 @@
 import { offlineDB, type QueuedWrite } from './store';
 import { classifyError } from '../db/errors';
-import { MAX_FLUSH_ATTEMPTS, FLUSH_BATCH_SIZE, DEAD_LETTER_TTL_MS } from '../constants';
+import { MAX_FLUSH_ATTEMPTS, FLUSH_BATCH_SIZE, DEAD_LETTER_TTL_MS, SESSION_DEADLINE_MS } from '../constants';
+import { withDeadline, TIMED_OUT } from '../deadline';
 import { useQueueStatusStore } from '../../store/queueStatus';
 import { recordLastSync } from '../lastSync';
 
@@ -169,7 +170,21 @@ async function publishStatus(userId: string, result: FlushResult): Promise<void>
 
 export async function flushOnce(userId: string): Promise<FlushResult> {
   const d = requireDeps();
-  const session = await d.getSession();
+  // C-75: this await runs while requestFlush holds the origin-wide
+  // navigator.locks 'tt-flush' lock, and getSession can hang — supabase-js
+  // resolves the access token *before* calling the wrapped fetch, so the 15s
+  // timeout in supabase.ts never starts its clock on a stuck session refresh.
+  // Unbounded, that wedges flushing in every tab and the PWA window until a
+  // reload, with no banner and no status change. Bounded, the worst case is
+  // one flush that sends nothing and retries on the next trigger.
+  const session = await withDeadline(d.getSession(), SESSION_DEADLINE_MS);
+  if (session === TIMED_OUT) {
+    // 'offline', not 'auth': a slow session check is not a missing one, and
+    // 'auth' would both lie to the user and stop flushing until a sign-in
+    // event. Nothing was touched, so no attempts are burned either.
+    useQueueStatusStore.getState().setStatus('offline');
+    return 'network';
+  }
   if (!session) {
     // Nothing touched, no attempts burned — but the banner still needs to know.
     useQueueStatusStore.getState().setStatus('auth');

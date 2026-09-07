@@ -1,10 +1,15 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import { offlineDB, type QueuedWrite } from '../../../src/lib/offline/store';
 import { configureFlush, flushOnce, type FlushDeps } from '../../../src/lib/offline/flush';
 import { useQueueStatusStore } from '../../../src/store/queueStatus';
 import { deferred } from '../../helpers/deferred';
-import { MAX_FLUSH_ATTEMPTS, FLUSH_BATCH_SIZE, DEAD_LETTER_TTL_MS } from '../../../src/lib/constants';
+import {
+  MAX_FLUSH_ATTEMPTS,
+  FLUSH_BATCH_SIZE,
+  DEAD_LETTER_TTL_MS,
+  SESSION_DEADLINE_MS,
+} from '../../../src/lib/constants';
 
 const USER = 'user-1';
 let seq = 0;
@@ -359,5 +364,48 @@ describe('flushOnce — last-sync gating (C-63)', () => {
 
     expect(result).toBe('network');
     expect(useQueueStatusStore.getState().lastSyncedAt).toBeTypeOf('number');
+  });
+});
+
+describe('flushOnce — C-75 getSession deadline', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("gives up on a hung getSession and reports 'network' instead of waiting forever", async () => {
+    const sendUpsertBatch = vi.fn(async () => {});
+    await offlineDB.writes.put(seedRow({ slotIndex: 1, rev: 'rev-hung' }));
+    configureFlush(baseDeps({ getSession: () => new Promise(() => {}), sendUpsertBatch }));
+
+    // Only the deadline's own timer APIs: fake-indexeddb settles its requests
+    // through setImmediate, and faking that stalls every Dexie call here.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const flushPromise = flushOnce(USER);
+    await vi.advanceTimersByTimeAsync(SESSION_DEADLINE_MS);
+
+    await expect(flushPromise).resolves.toBe('network');
+    vi.useRealTimers();
+
+    // Nothing sent, nothing touched: the row stays queued, unbumped, for the
+    // next trigger — a hang is a connectivity problem, not a poison row.
+    expect(sendUpsertBatch).not.toHaveBeenCalled();
+    const row = await offlineDB.writes.get([USER, '2026-07-15', 1]);
+    expect(row?.rev).toBe('rev-hung');
+    expect(row?.attempts).toBe(0);
+    expect(await offlineDB.dead.count()).toBe(0);
+  });
+
+  it("publishes 'offline', not 'auth', when the session check times out", async () => {
+    configureFlush(baseDeps({ getSession: () => new Promise(() => {}) }));
+
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const flushPromise = flushOnce(USER);
+    await vi.advanceTimersByTimeAsync(SESSION_DEADLINE_MS);
+    await flushPromise;
+    vi.useRealTimers();
+
+    // The session was never proven missing — only slow. An auth banner would
+    // be a lie, and would stop flushing until a sign-in event.
+    expect(useQueueStatusStore.getState().status).toBe('offline');
   });
 });

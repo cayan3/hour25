@@ -14,8 +14,8 @@ import type { Database } from './database.types';
 // Known gaps this wrapper does NOT cover:
 // - supabase-js awaits the access token (auth.getSession()) BEFORE calling
 //   this fetch, so a hang inside GoTrueClient's session-refresh path never
-//   starts this clock. That includes flush: its getSession dep goes through
-//   the same layer.
+//   starts this clock. Flush bounds its own session check for that reason
+//   (C-75); every other caller is still exposed to it.
 // - postgrest-js internally retries GET/HEAD/OPTIONS up to 3× (1s/2s/4s
 //   backoff) on fetch rejections, and its abort guard doesn't recognize the
 //   TimeoutError this wrapper produces — a hung READ settles after ~67s
