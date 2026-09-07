@@ -5,7 +5,11 @@ vi.mock('../../../src/lib/offline/sync', () => ({
 }));
 
 import { offlineDB, type DeadWrite } from '../../../src/lib/offline/store';
-import { retryDeadWrite, discardDeadWrite } from '../../../src/lib/offline/deadLetters';
+import {
+  retryDeadWrite,
+  discardDeadWrite,
+  clearDeadWrites,
+} from '../../../src/lib/offline/deadLetters';
 import { useQueueStatusStore } from '../../../src/store/queueStatus';
 
 const USER = 'user-1';
@@ -107,5 +111,28 @@ describe('discardDeadWrite', () => {
     expect(await offlineDB.dead.count()).toBe(0);
     expect(await offlineDB.writes.count()).toBe(0);
     expect(useQueueStatusStore.getState().deadCount).toBe(0);
+  });
+});
+
+describe('clearDeadWrites', () => {
+  it('drops every set-aside row for the user and republishes the count', async () => {
+    await offlineDB.dead.add(deadRow());
+    await offlineDB.dead.add(deadRow({ slotIndex: 19 }));
+    useQueueStatusStore.setState({ deadCount: 2 });
+
+    expect(await clearDeadWrites(USER)).toBe(2);
+    expect(await offlineDB.dead.count()).toBe(0);
+    expect(useQueueStatusStore.getState().deadCount).toBe(0);
+  });
+
+  it("leaves another account's set-aside rows alone", async () => {
+    await offlineDB.dead.add(deadRow());
+    await offlineDB.dead.add(deadRow({ userId: 'user-2' }));
+
+    await clearDeadWrites(USER);
+
+    const rows = await offlineDB.dead.toArray();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].userId).toBe('user-2');
   });
 });

@@ -5,7 +5,7 @@ vi.mock('../../../src/lib/offline/sync', () => ({
 }));
 
 import { offlineDB } from '../../../src/lib/offline/store';
-import { enqueueMany, type EntryWrite } from '../../../src/lib/offline/queue';
+import { clearPendingWrites, enqueueMany, type EntryWrite } from '../../../src/lib/offline/queue';
 import { requestFlush } from '../../../src/lib/offline/sync';
 
 beforeEach(async () => {
@@ -57,5 +57,32 @@ describe('enqueueMany', () => {
     const row = await offlineDB.writes.get(['user-1', '2026-07-15', 4]);
     expect(row?.note).toBe('gym');
     expect(row?.chunkMinutes).toBe(45);
+  });
+});
+
+describe('clearPendingWrites', () => {
+  it('removes every queued row for the user and reports how many it dropped', async () => {
+    await enqueueMany('user-1', [
+      { date: '2026-07-15', slotIndex: 4, op: 'upsert', labelId: 'label-1' },
+      { date: '2026-07-15', slotIndex: 5, op: 'delete', labelId: null },
+    ]);
+
+    expect(await clearPendingWrites('user-1')).toBe(2);
+    expect(await offlineDB.writes.count()).toBe(0);
+  });
+
+  it('never touches another account queued in the same browser', async () => {
+    await enqueueMany('user-1', [{ date: '2026-07-15', slotIndex: 4, op: 'upsert', labelId: 'label-1' }]);
+    await enqueueMany('user-2', [{ date: '2026-07-15', slotIndex: 4, op: 'upsert', labelId: 'label-2' }]);
+
+    await clearPendingWrites('user-1');
+
+    const rows = await offlineDB.writes.toArray();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].userId).toBe('user-2');
+  });
+
+  it('is a no-op on an empty queue', async () => {
+    expect(await clearPendingWrites('user-1')).toBe(0);
   });
 });

@@ -49,3 +49,13 @@ export async function discardDeadWrite(userId: string, dead: DeadWrite): Promise
   if (dead.id !== undefined) await offlineDB.dead.delete(dead.id);
   await refreshDeadCount(userId);
 }
+
+// The "Your data" actions' half of the purge (see clearPendingWrites): a
+// set-aside row is a write that never landed, so it is this account's data
+// too, and after a reset its label no longer exists for a retry to succeed
+// against. Scoped to one user, like every other function here.
+export async function clearDeadWrites(userId: string): Promise<number> {
+  const removed = await offlineDB.dead.filter((r) => r.userId === userId).delete();
+  await refreshDeadCount(userId);
+  return removed;
+}

@@ -33,3 +33,15 @@ export function recordLabelUse(userId: string, labelId: string): void {
     // Quota/private-mode: MRU is a convenience, not data — drop silently.
   }
 }
+
+// A reset deletes every label, so the stored ids point at nothing; deleting an
+// account should not leave its label ids sitting in this browser either.
+// Silent on failure for the same reason the writer is: the MRU is a
+// convenience, never data.
+export function clearMru(userId: string): void {
+  try {
+    localStorage.removeItem(keyFor(userId));
+  } catch {
+    // Storage unavailable — nothing was stored to clear.
+  }
+}

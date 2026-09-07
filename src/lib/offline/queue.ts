@@ -37,3 +37,13 @@ export async function enqueueMany(userId: string, ws: EntryWrite[]): Promise<voi
 export function listPendingWrites(userId: string) {
   return offlineDB.writes.filter((w) => w.userId === userId).toArray();
 }
+
+// Both "Your data" actions purge the queue after the server call succeeds:
+// rows queued against labels the reset just deleted can only flush into
+// foreign-key failures and reappear as set-aside entries, and on a deleted
+// account they have nowhere left to go. Scoped to one user — another account
+// signed in on the same browser keeps its unsent work. This is NOT the
+// sign-out path, which must never touch the queue.
+export async function clearPendingWrites(userId: string): Promise<number> {
+  return offlineDB.writes.filter((w) => w.userId === userId).delete();
+}

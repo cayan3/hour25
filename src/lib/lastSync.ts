@@ -22,3 +22,14 @@ export function recordLastSync(userId: string, ts: number): void {
     // Storage unavailable — the in-memory store value still covers the session.
   }
 }
+
+// Account deletion only: after a reset the timestamp is still true (a flush
+// really did sync this account), but a deleted account should leave nothing
+// behind in this browser.
+export function clearLastSync(userId: string): void {
+  try {
+    localStorage.removeItem(KEY_PREFIX + userId);
+  } catch {
+    // Storage unavailable — nothing was stored to clear.
+  }
+}
