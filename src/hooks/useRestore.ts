@@ -89,7 +89,6 @@ export function useRestore(userId: string): RestoreController {
       }
       // A restore repopulates every domain — refresh them all once.
       queryClient.invalidateQueries({ queryKey: ['entries'] });
-      queryClient.invalidateQueries({ queryKey: ['entries-earliest', userId] });
       queryClient.invalidateQueries({ queryKey: ['labels', userId] });
       queryClient.invalidateQueries({ queryKey: ['labels-all', userId] });
       queryClient.invalidateQueries({ queryKey: ['categories', userId] });

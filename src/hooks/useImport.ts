@@ -120,10 +120,13 @@ export function useImport(userId: string): ImportController {
         { createLabel, restoreLabel, bulkUpsertDirect },
         (done, total) => setProgress({ done, total }),
       );
-      // Once, at the end (C-36): the prefix covers every cached day/range;
-      // entries-earliest is its own key and import can move both bounds.
+      // Once, at the end (C-36): the prefix covers every cached day/range.
+      // The date bounds move too, but getEarliestEntryDate is called
+      // imperatively rather than through a query, so there is nothing cached
+      // under it to invalidate. C-43 gives the stats work a real
+      // ['entries-earliest', userId] query — when that lands, an invalidation
+      // belongs here and in useRestore, because both move the first-entry date.
       queryClient.invalidateQueries({ queryKey: ['entries'] });
-      queryClient.invalidateQueries({ queryKey: ['entries-earliest', userId] });
       if (result.createdLabels > 0 || result.restoredLabels > 0) {
         queryClient.invalidateQueries({ queryKey: ['labels', userId] });
         queryClient.invalidateQueries({ queryKey: ['labels-all', userId] });
