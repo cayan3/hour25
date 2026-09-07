@@ -14,6 +14,7 @@ import { ImportPanel } from './ImportPanel';
 import { RestorePanel } from './RestorePanel';
 import { SetAsidePanel } from '../sync/SetAsidePanel';
 import { FeedbackPanel } from './FeedbackPanel';
+import { YourDataPanel } from './YourDataPanel';
 import { advancedToolsEnabled } from '../../lib/advanced';
 
 // Rarely-used sections collapse by default (Week 5 feedback); the frequent
@@ -186,6 +187,12 @@ export function SettingsView({
           <FeedbackPanel userId={userId} />
         </div>
       </section>
+
+      {/* Last, and not collapsed: the deletion the privacy policy promises has
+          to be findable on its own, and a disclosure triangle is exactly the
+          kind of burying that promise cannot survive. Renders its own
+          bordered <section>. */}
+      <YourDataPanel userId={userId} />
     </div>
   );
 }
