@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 
-// Connectivity for C-36's import/restore buttons ONLY: those are the two
-// sanctioned online-only flows, and their spec is "disabled offline with a
-// hint". This must never gate the entry write path — writes go to the queue
-// regardless of connectivity, that's the whole architecture.
+// Connectivity for the online-only Settings flows ONLY — import, restore and
+// export — whose spec is "disabled offline with a hint" (C-36). Export joins
+// the other two because it reads the whole entry range from the server: a read
+// rather than a write, but just as impossible offline. This must never gate the
+// entry write path — writes go to the queue regardless of connectivity, that's
+// the whole architecture.
 export function useOnline(): boolean {
   const [online, setOnline] = useState(() => navigator.onLine);
 
