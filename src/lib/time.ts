@@ -40,3 +40,16 @@ export function addDays(dateStr: string, delta: number): string {
   d.setDate(d.getDate() + delta);
   return localDateString(d);
 }
+
+// "16h 30m" / "45m" / "0m" — durations for the stats surfaces. Manual, like
+// localDateString: no Intl.DurationFormat (uneven browser support, and C-45's
+// reason for avoiding locale data applies to anything that must read the same
+// on every device).
+export function formatDuration(minutes: number): string {
+  const total = Math.max(0, Math.round(minutes));
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  if (h === 0) return `${m}m`;
+  if (m === 0) return `${h}h`;
+  return `${h}h ${m}m`;
+}

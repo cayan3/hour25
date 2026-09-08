@@ -10,6 +10,7 @@ import {
   localDateString,
   parseLocalDate,
   addDays,
+  formatDuration,
 } from '../../src/lib/time';
 
 afterAll(() => {
@@ -101,5 +102,24 @@ describe('addDays', () => {
 
   it('returns the same date for a zero delta', () => {
     expect(addDays('2026-07-15', 0)).toBe('2026-07-15');
+  });
+});
+
+describe('formatDuration', () => {
+  it('renders hours and minutes together', () => {
+    expect(formatDuration(16 * 60 + 30)).toBe('16h 30m');
+  });
+
+  it('drops the hours below an hour and the minutes on the hour', () => {
+    expect(formatDuration(45)).toBe('45m');
+    expect(formatDuration(120)).toBe('2h');
+  });
+
+  it('renders zero as 0m rather than an empty string', () => {
+    expect(formatDuration(0)).toBe('0m');
+  });
+
+  it('floors a negative duration at zero', () => {
+    expect(formatDuration(-30)).toBe('0m');
   });
 });
