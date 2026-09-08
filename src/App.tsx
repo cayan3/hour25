@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { getCurrentSession, onAuthStateChange, signOut, type Session } from './lib/db/auth';
 import { ensureUserSettings } from './lib/db/settings';
+import { bootstrapAccountCache } from './lib/bootstrap';
 import { useSettings } from './hooks/useSettings';
 import { configureSupabaseFlush } from './lib/offline/supabaseFlush';
 import { initOfflineSync } from './lib/offline/sync';
@@ -95,23 +96,12 @@ function toAuthState(session: Session | null): AuthState {
 // writing the browser-detected timezone (C-48). Safe to call on every
 // sign-in — a returning user's row is left untouched.
 //
-// Also force-invalidates labels/labels-all/categories alongside settings.
-// Without this, those three rely purely on the default 60s staleTime — fine
-// for normal multi-device drift, but it means a fresh app load can serve up
-// to a minute of stale label/category data from the persisted cache even
-// though `settings` (forced fresh here) already reflects reality. Cheap to
-// do unconditionally on every boot/sign-in; keeps all four core queries in
-// lockstep instead of settings alone jumping ahead.
+// The cache refresh that follows is chained on purpose: `settings` must be
+// invalidated after the row is known to exist, or a brand-new account refetches
+// null. See bootstrapAccountCache for which prefixes it covers and why.
 function bootstrapUserSettings(userId: string): void {
   ensureUserSettings(userId, Intl.DateTimeFormat().resolvedOptions().timeZone)
-    .then(() =>
-      Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['settings', userId] }),
-        queryClient.invalidateQueries({ queryKey: ['labels', userId] }),
-        queryClient.invalidateQueries({ queryKey: ['labels-all', userId] }),
-        queryClient.invalidateQueries({ queryKey: ['categories', userId] }),
-      ]),
-    )
+    .then(() => bootstrapAccountCache(queryClient, userId))
     .catch((e) => {
       console.error('ensureUserSettings failed', e);
     });

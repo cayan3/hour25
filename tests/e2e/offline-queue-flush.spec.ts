@@ -1,7 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { LABEL_NAME, deleteAllEntries, serverSlots, useTestAccount, type TestAccount } from './helpers/account';
 import {
-  expectPersistedSlots,
   expectQueueDrains,
   expectQueuedSlots,
   expectReadyToLogOffline,
@@ -72,14 +71,9 @@ test('entries logged offline queue up, then flush on reconnect and survive a rel
   await expect.poll(() => serverSlots(account, DATE)).toEqual([FIRST, SECOND]);
   await expect(syncAnnouncer(page)).toHaveText('All entries synced');
 
-  // Wait for the flushed day to reach the persisted cache before reloading.
-  // Not politeness: the persister throttles, and a reload inside that window
-  // restores the pre-flush snapshot with its original timestamp, which
-  // staleTime (60s) then treats as fresh — so the grid comes back empty and
-  // stays empty. That is a real defect, recorded rather than papered over; this
-  // spec is about the entries surviving a reload, not about that window.
-  await expectPersistedSlots(page, account.userId, DATE, [FIRST, SECOND]);
-
+  // Reloaded immediately, with no wait for the persister to catch up: boot
+  // refreshes the cached entries (bootstrapAccountCache), so a dump still
+  // holding the pre-flush snapshot no longer decides what the day shows.
   await page.reload();
   await waitForDayView(page, DATE);
   await expect(loggedSlot(page, FIRST, LABEL_NAME)).toBeVisible();
