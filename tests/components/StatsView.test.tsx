@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StatsView } from '../../src/components/stats/StatsView';
 import { offlineDB } from '../../src/lib/offline/store';
@@ -19,6 +19,14 @@ vi.mock('../../src/lib/db/labels', () => ({
   softDeleteLabel: vi.fn(),
   restoreLabel: vi.fn(),
   updateLabel: vi.fn(),
+}));
+
+const listCategories = vi.fn();
+vi.mock('../../src/lib/db/categories', () => ({
+  listCategories: (...args: unknown[]) => listCategories(...args),
+  createCategory: vi.fn(),
+  updateCategory: vi.fn(),
+  deleteCategory: vi.fn(),
 }));
 
 const getSettings = vi.fn();
@@ -72,6 +80,27 @@ const WEEK_ROWS = [
   ...serverRows('2026-07-15', 16, 21, WORK),
 ];
 
+// The week before, measured to the same Wednesday 10:15 by previousPeriodNow:
+// 93 of 117 elapsed slots filled, 48 of them sleep → 45 of 69 waking = 65%.
+const PREV_WEEK_ROWS = [
+  ...serverRows('2026-07-06', 0, 16, SLEEP),
+  ...serverRows('2026-07-06', 16, 48, WORK),
+  ...serverRows('2026-07-07', 0, 16, SLEEP),
+  ...serverRows('2026-07-07', 16, 24, WORK),
+  ...serverRows('2026-07-08', 0, 16, SLEEP),
+  ...serverRows('2026-07-08', 16, 21, WORK),
+];
+
+// Shift a fixture date forward a week so the previous period holds an
+// identical shape to the current one.
+function addWeek(date: string): string {
+  const [y, m, d] = date.split('-').map(Number);
+  const shifted = new Date(y, m - 1, d - 7);
+  return `${shifted.getFullYear()}-${String(shifted.getMonth() + 1).padStart(2, '0')}-${String(
+    shifted.getDate(),
+  ).padStart(2, '0')}`;
+}
+
 const onOpenToday = vi.fn();
 const onOpenSettings = vi.fn();
 
@@ -91,8 +120,13 @@ beforeEach(async () => {
   vi.setSystemTime(NOW);
   vi.clearAllMocks();
   await offlineDB.writes.clear();
-  getEntriesForRange.mockResolvedValue(WEEK_ROWS);
+  getEntriesForRange.mockImplementation(async (_userId: string, start: string) => {
+    if (start === '2026-07-13') return WEEK_ROWS;
+    if (start === '2026-07-06') return PREV_WEEK_ROWS;
+    return [];
+  });
   listAllLabels.mockResolvedValue(LABELS);
+  listCategories.mockResolvedValue([]);
   getSettings.mockResolvedValue(settings(SLEEP));
 });
 
@@ -207,5 +241,123 @@ describe('StatsView', () => {
     fireEvent.click(screen.getByRole('button', { name: /this week/i }));
     await waitFor(() => expect(screen.queryByRole('button', { name: /this week/i })).toBeNull());
     expect(await screen.findByText('88%')).toBeTruthy();
+  });
+});
+
+describe('StatsView by-day bars', () => {
+  it('renders one row per day of the period with its own waking percentage', async () => {
+    renderView();
+    await screen.findByText('88%');
+
+    // Mon and Tue fully elapsed; Tue lost 8 evening slots, so it trails Mon.
+    expect(screen.getByText('Mon 13')).toBeTruthy();
+    expect(screen.getByText('Sun 19')).toBeTruthy();
+    const list = screen.getByText('Mon 13').closest('ul')!;
+    expect(list.querySelectorAll('li')).toHaveLength(7);
+  });
+
+  it('names both series in a legend rather than leaving them to colour', async () => {
+    renderView();
+    await screen.findByText('88%');
+
+    const legend = screen.getByText('Waking').closest('p')!;
+    expect(legend.textContent).toContain('Waking');
+    expect(legend.textContent).toContain('Sleep');
+  });
+
+  it('shows a dash for days the clock has not reached', async () => {
+    renderView();
+    await screen.findByText('88%');
+
+    // Thu-Sun have no elapsed time, so there is no percentage to state.
+    expect(screen.getAllByText('—')).toHaveLength(4);
+  });
+
+  it('is hidden for a single-day period, where a per-day breakdown says nothing', async () => {
+    renderView();
+    await screen.findByText('88%');
+
+    fireEvent.click(screen.getByRole('button', { name: 'day' }));
+    await waitFor(() => expect(screen.queryByText('By day')).toBeNull());
+  });
+});
+
+describe('StatsView period comparison', () => {
+  it('compares against the same slice of the previous period, in points', async () => {
+    renderView();
+
+    expect(await screen.findByText('+23 pts vs previous week')).toBeTruthy();
+    expect(getEntriesForRange).toHaveBeenCalledWith(USER, '2026-07-06', '2026-07-12');
+  });
+
+  it('says so plainly when nothing changed', async () => {
+    getEntriesForRange.mockImplementation(async (_userId: string, start: string) => {
+      if (start === '2026-07-13') return WEEK_ROWS;
+      if (start === '2026-07-06') return WEEK_ROWS.map((r) => ({ ...r, date: addWeek(r.date) }));
+      return [];
+    });
+    renderView();
+
+    expect(await screen.findByText('No change vs previous week')).toBeTruthy();
+  });
+
+  it('omits the comparison when the previous period has no waking time', async () => {
+    getEntriesForRange.mockImplementation(async (_userId: string, start: string) =>
+      start === '2026-07-13' ? WEEK_ROWS : [],
+    );
+    renderView();
+
+    await screen.findByText('88%');
+    // An empty previous week still has waking time (all of it untracked), so
+    // the comparison is real: 88% against 0%.
+    expect(await screen.findByText('+88 pts vs previous week')).toBeTruthy();
+  });
+});
+
+describe('StatsView category totals', () => {
+  const CATEGORIES = [
+    { id: 'cat-health', name: 'Health', color: '#16a34a' },
+    { id: 'cat-work', name: 'Work', color: '#0284c7' },
+  ];
+
+  function withCategories() {
+    listCategories.mockResolvedValue(CATEGORIES);
+    listAllLabels.mockResolvedValue([
+      { ...LABELS[0], category_id: 'cat-health' },
+      { ...LABELS[1], category_id: 'cat-work' },
+    ]);
+  }
+
+  it('is hidden entirely for an account with no categories', async () => {
+    renderView();
+    await screen.findByText('88%');
+
+    expect(screen.queryByText('Totals by category')).toBeNull();
+  });
+
+  it('groups labels into their categories', async () => {
+    withCategories();
+    renderView();
+    await screen.findByText('88%');
+
+    // Scoped: Health holds only the sleep label, so its figure is identical to
+    // the Sleep row's in the by-label section above.
+    const section = screen.getByText('Totals by category').closest('section')!;
+    expect(within(section).getByText('Health')).toBeTruthy();
+    expect(within(section).getByText('Work')).toBeTruthy();
+    expect(within(section).getByText('24h · 41%')).toBeTruthy();
+  });
+
+  it('drops sleep and divides by waking time in the exclude-sleep variant', async () => {
+    withCategories();
+    renderView();
+    await screen.findByText('88%');
+
+    fireEvent.click(screen.getByRole('checkbox', { name: /exclude sleep/i }));
+
+    // Health held only the sleep label, so it disappears; Work is now 30h 30m
+    // of the 34h 30m of waking time rather than of the whole elapsed week.
+    await waitFor(() => expect(screen.queryByText('Health')).toBeNull());
+    expect(screen.getByText('30h 30m · 88%')).toBeTruthy();
   });
 });
