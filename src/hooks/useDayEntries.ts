@@ -48,7 +48,12 @@ export function useRangeEntries(
   end: string,
 ): { entries: DatedEntry[]; isPending: boolean } {
   const server = useQuery({
-    queryKey: ['entries', userId, start, end],
+    // A one-day range IS that day: same helper, same arguments, same rows — so
+    // it reuses useDayEntries' key rather than caching a second identical copy
+    // under ['entries', userId, d, d] and refetching what the day view holds.
+    // Both shapes are §7.5 keys and both sit under the ['entries'] prefix that
+    // every invalidation targets.
+    queryKey: start === end ? ['entries', userId, start] : ['entries', userId, start, end],
     queryFn: () => getEntriesForRange(userId, start, end),
     staleTime: 60_000,
   });
