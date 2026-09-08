@@ -12,6 +12,7 @@ import { SyncChip } from './components/sync/SyncChip';
 import { AuthBanner } from './components/sync/AuthBanner';
 import { DeadLetterToast } from './components/sync/DeadLetterToast';
 import { DayView } from './components/day/DayView';
+import { StatsView } from './components/stats/StatsView';
 import { SettingsView } from './components/settings/SettingsView';
 import { OnboardingWizard } from './components/onboarding/OnboardingWizard';
 
@@ -33,6 +34,51 @@ function GearIcon() {
     </svg>
   );
 }
+
+// Same 14px stroke geometry as the gear, so the three tabs sit on one baseline.
+function TabIcon({ children }: { children: React.ReactNode }) {
+  return (
+    <svg
+      aria-hidden="true"
+      width={14}
+      height={14}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      {children}
+    </svg>
+  );
+}
+
+function CalendarIcon() {
+  return (
+    <TabIcon>
+      <rect x="3" y="4" width="18" height="18" rx="2" />
+      <path d="M16 2v4M8 2v4M3 10h18" />
+    </TabIcon>
+  );
+}
+
+function ChartIcon() {
+  return (
+    <TabIcon>
+      <path d="M3 21V9M9 21V4M15 21v-8M21 21V13" />
+    </TabIcon>
+  );
+}
+
+const TABS = ['today', 'stats', 'settings'] as const;
+type TabName = (typeof TABS)[number];
+
+const TAB_ICONS: Record<TabName, () => React.ReactElement> = {
+  today: CalendarIcon,
+  stats: ChartIcon,
+  settings: GearIcon,
+};
 
 type AuthState =
   | { status: 'loading' }
@@ -132,7 +178,7 @@ export default function App() {
 
 function AuthenticatedShell({ userId, email }: { userId: string; email: string | null }) {
   const { data: settings } = useSettings(userId);
-  const [view, setView] = useState<'today' | 'settings'>('today');
+  const [view, setView] = useState<TabName>('today');
   const [setAsideReveal, setSetAsideReveal] = useState(0);
 
   if (!settings) {
@@ -164,23 +210,32 @@ function AuthenticatedShell({ userId, email }: { userId: string; email: string |
     // `clip` rather than `hidden` so position:sticky descendants keep working.
     <div className="min-h-screen overflow-x-clip bg-slate-50 text-slate-900 dark:bg-slate-900 dark:text-slate-50">
       <header className="flex items-center justify-between gap-2 border-b border-slate-200 p-3 sm:p-4 dark:border-slate-800">
+        {/* Icon + text on desktop, icon-only below sm (C-71's sanctioned rule
+            for "narrow screens where width forces it"): a third tab pushed the
+            header past a 360px viewport, which is what clipped it in Week 5.
+            aria-label keeps the accessible name when the text is hidden. The
+            bottom tab bar DESIGN §3 wants for mobile is still a Phase 2 item. */}
         <nav className="flex gap-1">
-          {(['today', 'settings'] as const).map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              onClick={() => setView(tab)}
-              aria-current={view === tab ? 'page' : undefined}
-              className={`flex items-center gap-1.5 rounded px-3 py-1.5 text-sm capitalize focus-visible:ring-2 focus-visible:ring-offset-2 ${
-                view === tab
-                  ? 'bg-slate-200 text-slate-900 dark:bg-slate-700 dark:text-slate-50'
-                  : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
-              }`}
-            >
-              {tab === 'settings' && <GearIcon />}
-              {tab}
-            </button>
-          ))}
+          {TABS.map((tab) => {
+            const Icon = TAB_ICONS[tab];
+            return (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => setView(tab)}
+                aria-label={tab}
+                aria-current={view === tab ? 'page' : undefined}
+                className={`flex min-h-11 items-center gap-1.5 rounded px-2.5 py-1.5 text-sm capitalize focus-visible:ring-2 focus-visible:ring-offset-2 sm:min-h-0 sm:px-3 ${
+                  view === tab
+                    ? 'bg-slate-200 text-slate-900 dark:bg-slate-700 dark:text-slate-50'
+                    : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+                }`}
+              >
+                <Icon />
+                <span className="hidden sm:inline">{tab}</span>
+              </button>
+            );
+          })}
         </nav>
         <div className="flex min-w-0 items-center gap-1 sm:gap-2">
           {/* Chip left of the email (Week 5 feedback): its state changes must
@@ -200,9 +255,15 @@ function AuthenticatedShell({ userId, email }: { userId: string; email: string |
         </div>
       </header>
       <AuthBanner userId={userId} />
-      {view === 'today' ? (
-        <DayView userId={userId} onOpenSettings={() => setView('settings')} />
-      ) : (
+      {view === 'today' && <DayView userId={userId} onOpenSettings={() => setView('settings')} />}
+      {view === 'stats' && (
+        <StatsView
+          userId={userId}
+          onOpenToday={() => setView('today')}
+          onOpenSettings={() => setView('settings')}
+        />
+      )}
+      {view === 'settings' && (
         <SettingsView
           userId={userId}
           revealSetAsideNonce={setAsideReveal}
