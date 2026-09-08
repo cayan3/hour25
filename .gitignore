@@ -21,3 +21,4 @@ docs/personal/
 # playwright
 test-results/
 playwright-report/
+playwright/.auth/
