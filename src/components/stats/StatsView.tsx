@@ -222,10 +222,6 @@ export function StatsView({
                 <LabelTotalRow key={row.labelId} row={row} />
               ))}
             </ul>
-            <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
-              Shares are of elapsed time; the rest is untracked. Empty slots count as untracked
-              time.
-            </p>
           </section>
         </>
       )}
