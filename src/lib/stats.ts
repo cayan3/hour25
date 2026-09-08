@@ -60,6 +60,18 @@ export function shiftPeriod(kind: PeriodKind, anchor: string, delta: number): st
   return localDateString(new Date(d.getFullYear(), d.getMonth() + delta, 1));
 }
 
+// The same wall-clock moment one period earlier. Comparing a period in
+// progress against the *whole* previous one would flatter or penalize it by
+// however much of it has not happened yet (Mon-Wed vs a full week); this makes
+// the comparison like-for-like — Mon-Wed 10:15 against Mon-Wed 10:15.
+export function previousPeriodNow(kind: PeriodKind, now: Date): Date {
+  const d = new Date(now);
+  if (kind === 'day') d.setDate(d.getDate() - 1);
+  else if (kind === 'week') d.setDate(d.getDate() - 7);
+  else d.setMonth(d.getMonth() - 1);
+  return d;
+}
+
 export function datesInRange(start: string, end: string): string[] {
   const out: string[] = [];
   for (let d = start; d <= end; d = addDays(d, 1)) out.push(d);
@@ -70,6 +82,16 @@ export interface LabelTotal {
   labelId: string;
   slots: number;
   minutes: number;
+}
+
+// One row per calendar day in the period, so a week can show *which* day the
+// gap was in rather than only an aggregate. Days past the clock carry
+// expectedSlots 0 and are rendered as not-yet-happened, not as untracked.
+export interface DayTotal {
+  date: string;
+  expectedSlots: number;
+  filledSlots: number;
+  sleepSlots: number;
 }
 
 export interface PeriodSummary {
@@ -90,6 +112,8 @@ export interface PeriodSummary {
   wakingPercent: number | null;
   /** Every label with at least one elapsed slot, most time first. */
   byLabel: LabelTotal[];
+  /** Every calendar day in the period, in order. */
+  byDate: DayTotal[];
 }
 
 // The headline metric (DESIGN §8): filled waking slots ÷ waking slots, with
@@ -116,6 +140,10 @@ export function summarizePeriod(
   for (const n of elapsedByDate.values()) expected += n;
 
   const slotsByLabel = new Map<string, number>();
+  const byDate = new Map<string, DayTotal>();
+  for (const [date, expectedSlots] of elapsedByDate) {
+    byDate.set(date, { date, expectedSlots, filledSlots: 0, sleepSlots: 0 });
+  }
   let filled = 0;
   let sleep = 0;
 
@@ -124,7 +152,12 @@ export function summarizePeriod(
     // Outside the period, or logged ahead of the clock — not measurable yet.
     if (elapsed === undefined || entry.slotIndex >= elapsed) continue;
     filled++;
-    if (entry.labelId === sleepLabelId) sleep++;
+    const day = byDate.get(entry.date)!;
+    day.filledSlots++;
+    if (entry.labelId === sleepLabelId) {
+      sleep++;
+      day.sleepSlots++;
+    }
     slotsByLabel.set(entry.labelId, (slotsByLabel.get(entry.labelId) ?? 0) + 1);
   }
 
@@ -149,5 +182,33 @@ export function summarizePeriod(
     byLabel: [...slotsByLabel.entries()]
       .map(([labelId, slots]) => ({ labelId, slots, minutes: slots * CHUNK_MINUTES }))
       .sort((a, b) => b.slots - a.slots || a.labelId.localeCompare(b.labelId)),
+    byDate: [...byDate.values()],
   };
+}
+
+export interface CategoryTotal {
+  /** null is the real "no category" bucket, not a missing lookup. */
+  categoryId: string | null;
+  slots: number;
+  minutes: number;
+}
+
+// C-24: category totals get an exclude-sleep variant. Sleep is normally the
+// largest single block of any day, so a category containing it swamps every
+// other category; passing the sleep label as excludeLabelId drops it from the
+// grouping entirely (the caller divides by waking time to match).
+export function totalsByCategory(
+  byLabel: LabelTotal[],
+  categoryOf: Map<string, string | null>,
+  excludeLabelId: string | null = null,
+): CategoryTotal[] {
+  const slots = new Map<string | null, number>();
+  for (const label of byLabel) {
+    if (label.labelId === excludeLabelId) continue;
+    const categoryId = categoryOf.get(label.labelId) ?? null;
+    slots.set(categoryId, (slots.get(categoryId) ?? 0) + label.slots);
+  }
+  return [...slots.entries()]
+    .map(([categoryId, n]) => ({ categoryId, slots: n, minutes: n * CHUNK_MINUTES }))
+    .sort((a, b) => b.slots - a.slots);
 }

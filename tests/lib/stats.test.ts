@@ -3,7 +3,9 @@ import {
   datesInRange,
   expectedSlots,
   periodRange,
+  previousPeriodNow,
   shiftPeriod,
+  totalsByCategory,
   summarizePeriod,
   untrackedSlots,
 } from '../../src/lib/stats';
@@ -243,5 +245,103 @@ describe('summarizePeriod', () => {
 
     expect(s.wakingExpectedSlots).toBe(0);
     expect(s.wakingPercent).toBeNull();
+  });
+});
+
+describe('summarizePeriod byDate', () => {
+  const now = new Date(2026, 6, 15, 10, 15); // Wed 15 Jul 2026, 10:15
+
+  it('emits one row per calendar day, in order, including untouched days', () => {
+    const week = periodRange('week', '2026-07-15');
+    const s = summarizePeriod(fill('2026-07-13', 0, 10, WORK), week, SLEEP, now);
+
+    expect(s.byDate.map((d) => d.date)).toEqual(datesInRange(week.start, week.end));
+    expect(s.byDate[0]).toEqual({
+      date: '2026-07-13',
+      expectedSlots: 48,
+      filledSlots: 10,
+      sleepSlots: 0,
+    });
+    expect(s.byDate[1].filledSlots).toBe(0);
+  });
+
+  it('splits sleep out of each day, so a day can show what it lost to waking gaps', () => {
+    const entries = [...fill('2026-07-13', 0, 16, SLEEP), ...fill('2026-07-13', 16, 40, WORK)];
+    const day = summarizePeriod(entries, periodRange('week', '2026-07-15'), SLEEP, now).byDate[0];
+
+    expect(day.filledSlots).toBe(40);
+    expect(day.sleepSlots).toBe(16);
+  });
+
+  it('marks days after the clock as having no elapsed time', () => {
+    const s = summarizePeriod([], periodRange('week', '2026-07-15'), SLEEP, now);
+
+    expect(s.byDate.map((d) => d.expectedSlots)).toEqual([48, 48, 21, 0, 0, 0, 0]);
+  });
+});
+
+describe('previousPeriodNow', () => {
+  it('steps back one day, one week, or one month of wall-clock time', () => {
+    const now = new Date(2026, 6, 15, 10, 15);
+    expect(previousPeriodNow('day', now)).toEqual(new Date(2026, 6, 14, 10, 15));
+    expect(previousPeriodNow('week', now)).toEqual(new Date(2026, 6, 8, 10, 15));
+    expect(previousPeriodNow('month', now)).toEqual(new Date(2026, 5, 15, 10, 15));
+  });
+
+  it('steps a month across a year boundary', () => {
+    expect(previousPeriodNow('month', new Date(2026, 0, 15, 9, 0))).toEqual(
+      new Date(2025, 11, 15, 9, 0),
+    );
+  });
+
+  it('leaves a short previous month fully elapsed when the 31st steps back', () => {
+    // 31 Feb overflows to 3 Mar — which lands after February's end, so the
+    // whole of February counts. That is the intended reading, not a bug.
+    const stepped = previousPeriodNow('month', new Date(2026, 2, 31, 10, 0));
+    const february = periodRange('month', shiftPeriod('month', '2026-03-31', -1));
+    expect(summarizePeriod([], february, null, stepped).expectedSlots).toBe(28 * 48);
+  });
+});
+
+describe('totalsByCategory', () => {
+  const byLabel = [
+    { labelId: SLEEP, slots: 48, minutes: 1440 },
+    { labelId: WORK, slots: 30, minutes: 900 },
+    { labelId: READING, slots: 6, minutes: 180 },
+  ];
+  const categoryOf = new Map<string, string | null>([
+    [SLEEP, 'cat-health'],
+    [WORK, 'cat-work'],
+    [READING, null],
+  ]);
+
+  it('groups labels into their categories, largest first', () => {
+    expect(totalsByCategory(byLabel, categoryOf)).toEqual([
+      { categoryId: 'cat-health', slots: 48, minutes: 1440 },
+      { categoryId: 'cat-work', slots: 30, minutes: 900 },
+      { categoryId: null, slots: 6, minutes: 180 },
+    ]);
+  });
+
+  it('keeps uncategorized labels as a real null bucket rather than dropping them', () => {
+    const only = totalsByCategory([{ labelId: READING, slots: 6, minutes: 180 }], categoryOf);
+    expect(only).toEqual([{ categoryId: null, slots: 6, minutes: 180 }]);
+  });
+
+  it('treats a label missing from the map as uncategorized', () => {
+    const totals = totalsByCategory([{ labelId: 'unknown', slots: 2, minutes: 60 }], categoryOf);
+    expect(totals).toEqual([{ categoryId: null, slots: 2, minutes: 60 }]);
+  });
+
+  it('drops the sleep label entirely in the exclude-sleep variant (C-24)', () => {
+    // The whole point: the category holding sleep otherwise dwarfs the rest.
+    expect(totalsByCategory(byLabel, categoryOf, SLEEP)).toEqual([
+      { categoryId: 'cat-work', slots: 30, minutes: 900 },
+      { categoryId: null, slots: 6, minutes: 180 },
+    ]);
+  });
+
+  it('returns nothing for an empty period', () => {
+    expect(totalsByCategory([], categoryOf)).toEqual([]);
   });
 });
