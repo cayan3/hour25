@@ -2,23 +2,13 @@ import { useOnline } from '../../hooks/useOnline';
 import { usePendingCount } from '../../hooks/useSync';
 import { useQueueStatusStore } from '../../store/queueStatus';
 
-// The address published in the privacy policy. The OAuth consent screen
-// requires a contact address anyway, so this should be that same mailbox
-// rather than a second one to monitor.
-const FEEDBACK_EMAIL = '';
+const FEEDBACK_EMAIL = 'hour25app@gmail.com';
 
 const BUTTON =
   'inline-block min-h-11 rounded border border-slate-300 px-3 py-1.5 text-sm font-medium hover:bg-slate-100 focus-visible:ring-2 focus-visible:ring-offset-2 dark:border-slate-600 dark:hover:bg-slate-800';
 
-// A mailto rather than a form that writes to the database, deliberately: the
-// reports most worth having here are about offline behaviour, and a form that
-// needs the network to submit is exactly the wrong shape for telling someone
-// the network path is broken. A mail client composes offline and sends on
-// reconnect.
-//
-// The prefilled body is the point. People report "it broke", never the state
-// the app was in when it did — and for this app the state that matters is
-// whether anything was still waiting to sync.
+// A mailto instead of a form that writes to the database bc a mail client 
+// composes offline and sends on reconnect.
 export function FeedbackPanel({ userId }: { userId: string }) {
   const online = useOnline();
   const pending = usePendingCount(userId);
@@ -50,7 +40,7 @@ export function FeedbackPanel({ userId }: { userId: string }) {
   ].join('\n');
 
   const href = `mailto:${FEEDBACK_EMAIL}?subject=${encodeURIComponent(
-    'Time Tracker feedback',
+    'Hour 25 feedback',
   )}&body=${encodeURIComponent(body)}`;
 
   return (
@@ -59,8 +49,7 @@ export function FeedbackPanel({ userId }: { userId: string }) {
         Report a problem or send feedback
       </a>
       <p className="text-sm text-slate-500 dark:text-slate-400">
-        Opens an email with a few technical details filled in — what your connection was doing and
-        whether anything was still waiting to sync. Delete any of it you’d rather not send.
+        Send an email about your issue and/or comments.
       </p>
     </div>
   );
