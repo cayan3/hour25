@@ -1,0 +1,50 @@
+name: keepalive
+
+# Supabase pauses Free-plan projects after roughly a week of low activity. A
+# paused project is quiet rather than obvious: warm sessions keep rendering from
+# the persisted cache and queued writes stay queued, but token refresh fails, so
+# cold starts cannot sign in and new accounts cannot be created at all. This job
+# keeps the project active and fails loudly if it ever stops answering.
+
+on:
+  schedule:
+    - cron: '23 7 * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Query PostgREST
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          set -uo pipefail
+
+          probe() {
+            curl -sS -o /dev/null -w '%{http_code}' --max-time 30 \
+              -H "apikey: ${SUPABASE_PUBLISHABLE_KEY}" \
+              -H "Authorization: Bearer ${SUPABASE_PUBLISHABLE_KEY}" \
+              "${SUPABASE_URL}/rest/v1/time_entries?select=id&limit=1" || echo 000
+          }
+
+          # The anon role holds no grant on time_entries, so PostgREST issues the
+          # query, Postgres refuses it with 42501, and a healthy project answers
+          # 401. The refusal is the point: it is a real round trip to the database
+          # rather than a read of the cached schema.
+          status=$(probe)
+          if [ "$status" = "000" ] || [ "$status" -ge 500 ]; then
+            echo "First attempt returned ${status}; retrying once."
+            sleep 30
+            status=$(probe)
+          fi
+
+          echo "PostgREST answered ${status}"
+          case "$status" in
+            200|401|403) exit 0 ;;
+            *) echo "::error::Project unreachable or unhealthy (HTTP ${status})"; exit 1 ;;
+          esac
