@@ -299,34 +299,37 @@ describe('StatsView by-day bars', () => {
 });
 
 describe('StatsView period comparison', () => {
-  it('compares against the same slice of the previous period, in points', async () => {
+  it('states each label as a change in minutes per tracked day', async () => {
     renderView();
 
-    expect(await screen.findByText('+23 pts vs previous week')).toBeTruthy();
+    await screen.findByText('Deep work');
     expect(getEntriesForRange).toHaveBeenCalledWith(USER, '2026-07-06', '2026-07-12');
+    // Work: 10h 10m a day now against 7h 30m a day over the same slice of the
+    // previous week, both across three tracked days.
+    expect(screen.getByText('+2h 40m/day')).toBeTruthy();
   });
 
-  it('says so plainly when nothing changed', async () => {
-    getEntriesForRange.mockImplementation(async (_userId: string, start: string) => {
-      if (start === '2026-07-13') return WEEK_ROWS;
-      if (start === '2026-07-06') return WEEK_ROWS.map((r) => ({ ...r, date: addWeek(r.date) }));
-      return [];
-    });
+  it('says so plainly when a label did not move', async () => {
     renderView();
 
-    expect(await screen.findByText('No change vs previous week')).toBeTruthy();
+    // Sleep is 8h a day in both weeks, so its row must say nothing changed
+    // rather than quietly omitting the comparison.
+    expect(await screen.findByText('no change')).toBeTruthy();
   });
 
-  it('omits the comparison when the previous period has no waking time', async () => {
+  it('claims nothing when the previous period tracked no days at all', async () => {
+    // Renamed from "omits the comparison when the previous period has no
+    // waking time", whose body asserted the opposite of its name. Dividing by
+    // zero tracked days would read as a rise from zero — a claim about
+    // behaviour, where the truth is an absence of data.
     getEntriesForRange.mockImplementation(async (_userId: string, start: string) =>
       start === '2026-07-13' ? WEEK_ROWS : [],
     );
     renderView();
 
-    await screen.findByText('88%');
-    // An empty previous week still has waking time (all of it untracked), so
-    // the comparison is real: 88% against 0%.
-    expect(await screen.findByText('+88 pts vs previous week')).toBeTruthy();
+    await screen.findByText('Deep work');
+    expect(screen.queryByText(/\/day$/)).toBeNull();
+    expect(screen.queryByText('no change')).toBeNull();
   });
 });
 
