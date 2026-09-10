@@ -261,6 +261,7 @@ describe('summarizePeriod byDate', () => {
       expectedSlots: 48,
       filledSlots: 10,
       sleepSlots: 0,
+      slotsByLabel: new Map([[WORK, 10]]),
     });
     expect(s.byDate[1].filledSlots).toBe(0);
   });
@@ -277,6 +278,59 @@ describe('summarizePeriod byDate', () => {
     const s = summarizePeriod([], periodRange('week', '2026-07-15'), SLEEP, now);
 
     expect(s.byDate.map((d) => d.expectedSlots)).toEqual([48, 48, 21, 0, 0, 0, 0]);
+  });
+
+  it('records which labels a day was spent on, not only how many slots', () => {
+    const entries = [...fill('2026-07-13', 0, 16, SLEEP), ...fill('2026-07-13', 16, 40, WORK)];
+    const day = summarizePeriod(entries, periodRange('week', '2026-07-15'), SLEEP, now).byDate[0];
+
+    expect(day.slotsByLabel.get(SLEEP)).toBe(16);
+    expect(day.slotsByLabel.get(WORK)).toBe(24);
+    expect(day.slotsByLabel.size).toBe(2);
+  });
+
+  it('leaves an untouched day with an empty composition rather than a missing one', () => {
+    const s = summarizePeriod([], periodRange('week', '2026-07-15'), SLEEP, now);
+
+    expect(s.byDate[0].slotsByLabel.size).toBe(0);
+  });
+
+  it('excludes slots logged ahead of the clock from the composition too', () => {
+    // Wed 15 Jul 10:15 is slot 20, so slots 21+ have not elapsed.
+    const s = summarizePeriod(
+      fill('2026-07-15', 18, 24, WORK),
+      periodRange('week', '2026-07-15'),
+      SLEEP,
+      now,
+    );
+    const wednesday = s.byDate.find((d) => d.date === '2026-07-15')!;
+
+    expect(wednesday.slotsByLabel.get(WORK)).toBe(3); // 18, 19, 20 only
+  });
+});
+
+describe('summarizePeriod trackedDays', () => {
+  const now = new Date(2026, 6, 15, 10, 15); // Wed 15 Jul 2026, 10:15
+
+  it('counts days carrying at least one entry, not days that elapsed', () => {
+    const entries = [...fill('2026-07-13', 0, 10, WORK), ...fill('2026-07-14', 0, 2, WORK)];
+
+    expect(
+      summarizePeriod(entries, periodRange('week', '2026-07-15'), SLEEP, now).trackedDays,
+    ).toBe(2);
+  });
+
+  it('counts a day spent entirely asleep as tracked', () => {
+    // The divisor must not move when a display toggle hides sleep.
+    const entries = fill('2026-07-13', 0, 48, SLEEP);
+
+    expect(
+      summarizePeriod(entries, periodRange('week', '2026-07-15'), SLEEP, now).trackedDays,
+    ).toBe(1);
+  });
+
+  it('is zero for an empty period', () => {
+    expect(summarizePeriod([], periodRange('week', '2026-07-15'), SLEEP, now).trackedDays).toBe(0);
   });
 });
 

@@ -92,6 +92,13 @@ export interface DayTotal {
   expectedSlots: number;
   filledSlots: number;
   sleepSlots: number;
+  /**
+   * labelId → elapsed slots on this date. Empty, never absent. Carrying the
+   * composition per day is what lets every slice of the period (weekday vs
+   * weekend, a single weekday, a custom range) be a fold over these rows
+   * rather than another pass over entries or another query.
+   */
+  slotsByLabel: Map<string, number>;
 }
 
 export interface PeriodSummary {
@@ -114,6 +121,14 @@ export interface PeriodSummary {
   byLabel: LabelTotal[];
   /** Every calendar day in the period, in order. */
   byDate: DayTotal[];
+  /**
+   * Days carrying at least one elapsed entry — the divisor for every per-day
+   * average on the Stats page. Counted over entries of any label, sleep
+   * included, and deliberately independent of the exclude-sleep display
+   * toggle: a display toggle must never move the divisor underneath the
+   * numbers it is toggling, and a day spent entirely asleep was still tracked.
+   */
+  trackedDays: number;
 }
 
 // The headline metric (DESIGN §8): filled waking slots ÷ waking slots, with
@@ -142,7 +157,13 @@ export function summarizePeriod(
   const slotsByLabel = new Map<string, number>();
   const byDate = new Map<string, DayTotal>();
   for (const [date, expectedSlots] of elapsedByDate) {
-    byDate.set(date, { date, expectedSlots, filledSlots: 0, sleepSlots: 0 });
+    byDate.set(date, {
+      date,
+      expectedSlots,
+      filledSlots: 0,
+      sleepSlots: 0,
+      slotsByLabel: new Map(),
+    });
   }
   let filled = 0;
   let sleep = 0;
@@ -159,6 +180,7 @@ export function summarizePeriod(
       day.sleepSlots++;
     }
     slotsByLabel.set(entry.labelId, (slotsByLabel.get(entry.labelId) ?? 0) + 1);
+    day.slotsByLabel.set(entry.labelId, (day.slotsByLabel.get(entry.labelId) ?? 0) + 1);
   }
 
   const untracked = Math.max(0, expected - filled);
@@ -183,6 +205,7 @@ export function summarizePeriod(
       .map(([labelId, slots]) => ({ labelId, slots, minutes: slots * CHUNK_MINUTES }))
       .sort((a, b) => b.slots - a.slots || a.labelId.localeCompare(b.labelId)),
     byDate: [...byDate.values()],
+    trackedDays: [...byDate.values()].filter((d) => d.filledSlots > 0).length,
   };
 }
 
