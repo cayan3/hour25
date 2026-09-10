@@ -166,29 +166,6 @@ export function StatsView({
         </p>
       ) : (
         <>
-          {kind !== 'day' && (
-            <DayBars
-              byDate={summary.byDate}
-              order={rows}
-              labelById={barLabels}
-              extremes={extremes}
-            />
-          )}
-
-          {kind !== 'day' && (
-            <PatternSection split={split} order={rows} labelById={barLabels} />
-          )}
-
-          {kind === 'day' && (
-            <DayStrip
-              entries={entries}
-              expectedSlots={summary.byDate[0]?.expectedSlots ?? 0}
-              labelById={barLabels}
-              highlightedId={highlightedId}
-              onHighlight={setHighlightedId}
-            />
-          )}
-
           <section data-testid="label-breakdown">
             <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
               <h2 className="text-sm font-medium">Breakdown by label</h2>
@@ -225,6 +202,29 @@ export function StatsView({
               <h2 className="mb-2 text-sm font-medium">Breakdown by category</h2>
               <BreakdownTable rows={categoryBreakdownRows} showPerDay={kind !== 'day'} />
             </section>
+          )}
+
+          {kind !== 'day' && (
+            <DayBars
+              byDate={summary.byDate}
+              order={rows}
+              labelById={barLabels}
+              extremes={extremes}
+            />
+          )}
+
+          {kind !== 'day' && (
+            <PatternSection split={split} order={rows} labelById={barLabels} />
+          )}
+
+          {kind === 'day' && (
+            <DayStrip
+              entries={entries}
+              expectedSlots={summary.byDate[0]?.expectedSlots ?? 0}
+              labelById={barLabels}
+              highlightedId={highlightedId}
+              onHighlight={setHighlightedId}
+            />
           )}
 
           <CoverageDetails
