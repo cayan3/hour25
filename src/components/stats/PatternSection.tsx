@@ -11,11 +11,12 @@ export interface PatternLabel {
 // showing 0 there would be a claim about behaviour rather than an absence of
 // data. { days: 0 }: such days elapsed and none were tracked. Otherwise: an
 // average over that side's own tracked days.
-function sideText(side: DaySubsetTotals | null, labelId: string, kind: string): string {
-  if (side === null) return `no ${kind} yet`;
-  if (side.days === 0) return `no ${kind} tracked`;
+function sideText(side: DaySubsetTotals | null, labelId: string, kind: 'weekday' | 'weekend'): string {
+  const where = kind === 'weekday' ? 'on weekdays' : 'at weekends';
+  if (side === null) return kind === 'weekday' ? 'no weekdays yet' : 'no weekend yet';
+  if (side.days === 0) return kind === 'weekday' ? 'no weekdays tracked' : 'no weekend tracked';
   const total = side.byLabel.find((t) => t.labelId === labelId);
-  return `${formatDuration((total?.minutes ?? 0) / side.days)}/day`;
+  return `${formatDuration((total?.minutes ?? 0) / side.days)}/day ${where}`;
 }
 
 export function PatternSection({
@@ -58,11 +59,11 @@ export function PatternSection({
                 <span className="truncate">{label?.name ?? 'Unknown label'}</span>
               </span>
               <span className="shrink-0 tabular-nums text-slate-500 dark:text-slate-400">
-                {`${sideText(split.weekday, row.labelId, 'weekday')} on weekdays · ${sideText(
+                {`${sideText(split.weekday, row.labelId, 'weekday')} · ${sideText(
                   split.weekend,
                   row.labelId,
                   'weekend',
-                )} at weekends`}
+                )}`}
               </span>
             </li>
           );

@@ -108,8 +108,11 @@ export function DayBars({
   const extremeText =
     peak === null || lowest === null
       ? null
-      : peak.date === lowest.date
-        ? `only ${shortDay(peak.date)} tracked, ${formatDuration(peak.wakingMinutes)} awake`
+      : // The two coincide when one day was tracked *or* when every tracked day
+        // came out equal, and the clause cannot tell those apart — so it states
+        // the day it knows about and claims nothing about how many there were.
+        peak.date === lowest.date
+        ? `best ${shortDay(peak.date)}, ${formatDuration(peak.wakingMinutes)}`
         : `best ${shortDay(peak.date)}, ${formatDuration(peak.wakingMinutes)} · quietest ${shortDay(
             lowest.date,
           )}, ${formatDuration(lowest.wakingMinutes)}`;
