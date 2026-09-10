@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { useStats, type StatsCategoryRow, type StatsLabelRow } from '../../hooks/useStats';
+import { useStats } from '../../hooks/useStats';
+import { BreakdownTable, type BreakdownRow } from './BreakdownTable';
 import { periodRange, shiftPeriod, type DayTotal, type PeriodKind } from '../../lib/stats';
 import { CHUNK_MINUTES, SLOTS_PER_DAY } from '../../lib/constants';
 import { formatDuration, localDateString, parseLocalDate } from '../../lib/time';
@@ -47,40 +48,6 @@ function MetricCard({
       <p className="mt-1 text-xl font-semibold tabular-nums">{value}</p>
       <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{caption}</p>
     </div>
-  );
-}
-
-function LabelTotalRow({ row }: { row: StatsLabelRow }) {
-  return (
-    <li>
-      <div className="flex items-baseline justify-between gap-3 text-sm">
-        <span className="flex min-w-0 items-center gap-2">
-          {/* Decorative: the name and the figures carry every fact this row
-              states, so nothing is encoded in color alone (DESIGN §10). */}
-          <span
-            aria-hidden="true"
-            style={{ backgroundColor: row.color }}
-            className="h-3 w-3 shrink-0 rounded-sm"
-          />
-          <span className="truncate">
-            {row.name}
-            {row.deleted && ' (deleted)'}
-            {row.isSleep && (
-              <span className="ml-1.5 text-xs text-slate-500 dark:text-slate-400">sleep</span>
-            )}
-          </span>
-        </span>
-        <span className="shrink-0 tabular-nums text-slate-500 dark:text-slate-400">
-          {`${formatDuration(row.minutes)} · ${Math.round(row.percent)}%`}
-        </span>
-      </div>
-      <div aria-hidden="true" className="mt-1 h-2 rounded bg-slate-200 dark:bg-slate-800">
-        <div
-          className="h-2 rounded motion-safe:transition-[width] motion-safe:duration-200"
-          style={{ width: `${row.percent}%`, backgroundColor: row.color }}
-        />
-      </div>
-    </li>
   );
 }
 
@@ -132,32 +99,6 @@ function DayBarRow({ day, sleepColor }: { day: DayTotal; sleepColor: string }) {
   );
 }
 
-function CategoryTotalRow({ row }: { row: StatsCategoryRow }) {
-  return (
-    <li>
-      <div className="flex items-baseline justify-between gap-3 text-sm">
-        <span className="flex min-w-0 items-center gap-2">
-          <span
-            aria-hidden="true"
-            style={{ backgroundColor: row.color }}
-            className="h-3 w-3 shrink-0 rounded-sm"
-          />
-          <span className="truncate">{row.name}</span>
-        </span>
-        <span className="shrink-0 tabular-nums text-slate-500 dark:text-slate-400">
-          {`${formatDuration(row.minutes)} · ${Math.round(row.percent)}%`}
-        </span>
-      </div>
-      <div aria-hidden="true" className="mt-1 h-2 rounded bg-slate-200 dark:bg-slate-800">
-        <div
-          className="h-2 rounded motion-safe:transition-[width] motion-safe:duration-200"
-          style={{ width: `${row.percent}%`, backgroundColor: row.color }}
-        />
-      </div>
-    </li>
-  );
-}
-
 // Phase 1.5 stats: daily/weekly/monthly totals and % of waking day, computed
 // client-side from the cached entries + the pending overlay (C-77). Plain CSS
 // bars, no charting library — Recharts is Phase 2 stack and DESIGN §11 keeps
@@ -184,8 +125,42 @@ export function StatsView({
     hasCategories,
     sleepLabelName,
     sleepColor,
+    trackedDays,
+    previousTrackedDays,
     deltaPoints,
   } = useStats(userId, kind, anchor, excludeSleep);
+
+  const labelRows: BreakdownRow[] = rows.map((row) => ({
+    id: row.labelId,
+    name: row.name,
+    color: row.color,
+    deleted: row.deleted,
+    suffix: row.isSleep ? 'sleep' : undefined,
+    minutes: row.minutes,
+    minutesPerDay: row.minutesPerDay,
+    percent: row.percent,
+    change: row.change,
+  }));
+
+  const categoryBreakdownRows: BreakdownRow[] = categoryRows.map((row) => ({
+    id: row.categoryId ?? 'uncategorized',
+    name: row.name,
+    color: row.color,
+    minutes: row.minutes,
+    minutesPerDay: row.minutesPerDay,
+    percent: row.percent,
+    change: null,
+  }));
+
+  // Stated because it moves between periods: a per-day average over five
+  // tracked days is a different claim from one over seven, and a comparison
+  // between two periods that tracked different numbers of days is only
+  // readable if both divisors are on the page.
+  const divisorCaption =
+    kind === 'day'
+      ? null
+      : `averages across ${trackedDays} tracked ${trackedDays === 1 ? 'day' : 'days'}` +
+        (previousTrackedDays > 0 ? ` · previous ${kind} ${previousTrackedDays}` : '');
 
   const isCurrent = start === periodRange(kind, localDateString()).start;
   const loggedPercent =
@@ -357,37 +332,35 @@ export function StatsView({
           )}
 
           <section>
-            <h2 className="mb-2 text-sm font-medium">Totals by label</h2>
-            <ul className="space-y-3">
-              {rows.map((row) => (
-                <LabelTotalRow key={row.labelId} row={row} />
-              ))}
-            </ul>
+            <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+              <h2 className="text-sm font-medium">Breakdown by label</h2>
+              {/* C-24's exclude-sleep variant, promoted from the category
+                  section to the page: sleep is normally the largest block of
+                  any day and swamps everything it sits beside. */}
+              <label className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                <input
+                  type="checkbox"
+                  checked={excludeSleep}
+                  onChange={(e) => setExcludeSleep(e.target.checked)}
+                  className="h-4 w-4 rounded focus-visible:ring-2 focus-visible:ring-offset-2"
+                />
+                Exclude sleep
+              </label>
+            </div>
+            {divisorCaption && (
+              <p className="mb-2 text-xs text-slate-500 tabular-nums dark:text-slate-400">
+                {divisorCaption}
+              </p>
+            )}
+            <BreakdownTable rows={labelRows} showPerDay={kind !== 'day'} />
           </section>
 
           {/* Hidden entirely for an account with no categories: every label
               would fall into one Uncategorized bar, which says nothing. */}
           {hasCategories && (
             <section>
-              <div className="mb-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-                <h2 className="text-sm font-medium">Totals by category</h2>
-                {/* C-24's exclude-sleep variant: a category holding the sleep
-                    label otherwise dwarfs every other category. */}
-                <label className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                  <input
-                    type="checkbox"
-                    checked={excludeSleep}
-                    onChange={(e) => setExcludeSleep(e.target.checked)}
-                    className="h-4 w-4 rounded focus-visible:ring-2 focus-visible:ring-offset-2"
-                  />
-                  Exclude sleep
-                </label>
-              </div>
-              <ul className="space-y-3">
-                {categoryRows.map((row) => (
-                  <CategoryTotalRow key={row.categoryId ?? 'uncategorized'} row={row} />
-                ))}
-              </ul>
+              <h2 className="mb-2 text-sm font-medium">Breakdown by category</h2>
+              <BreakdownTable rows={categoryBreakdownRows} showPerDay={kind !== 'day'} />
             </section>
           )}
         </>

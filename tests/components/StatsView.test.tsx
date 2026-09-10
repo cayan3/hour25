@@ -145,13 +145,29 @@ describe('StatsView', () => {
     expect(screen.getByText(/24h sleep excluded/)).toBeTruthy();
   });
 
-  it('lists per-label totals with the duration stated in text, not only in the bar', async () => {
+  it('states each label as a per-day average and a total, in text not only in the bar', async () => {
     renderView();
 
-    await screen.findByText('88%');
-    expect(screen.getByText('Deep work')).toBeTruthy();
-    expect(screen.getByText('30h 30m · 52%')).toBeTruthy();
-    expect(screen.getByText('24h · 41%')).toBeTruthy();
+    await screen.findByText('Deep work');
+    // Three tracked days (Mon, Tue, Wed-so-far): 30h 30m of work averages
+    // 10h 10m a day, and the divisor is stated because it moves.
+    const workRow = screen.getAllByTestId('breakdown-share')[0].closest('li')!;
+    expect(workRow.textContent).toContain('10h 10m/day');
+    expect(workRow.textContent).toContain('30h 30m');
+    expect(screen.getByText(/3 tracked days/)).toBeTruthy();
+  });
+
+  it('divides shares by logged time, so the rows account for all of it', async () => {
+    renderView();
+    await screen.findByText('Deep work');
+
+    const shares = screen
+      .getAllByTestId('breakdown-share')
+      .map((el) => Number(el.textContent!.replace('%', '')));
+    // Integer rounding can land on 99 or 101; what must never happen is a page
+    // whose shares sum to well under 100 because untracked time ate the rest.
+    expect(shares.reduce((a, b) => a + b, 0)).toBeGreaterThanOrEqual(99);
+    expect(shares.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(101);
   });
 
   it('counts the pending queue, so an unflushed entry is not missing from the totals', async () => {
@@ -176,7 +192,7 @@ describe('StatsView', () => {
     renderView();
 
     await waitFor(() => expect(screen.getByText('Deep work')).toBeTruthy());
-    expect(screen.getByText('2h · 3%')).toBeTruthy();
+    expect(screen.getByText('Deep work').closest('li')!.textContent).toContain('2h');
   });
 
   it('shows the empty state with a link to today when nothing is logged', async () => {
@@ -332,7 +348,7 @@ describe('StatsView category totals', () => {
     renderView();
     await screen.findByText('88%');
 
-    expect(screen.queryByText('Totals by category')).toBeNull();
+    expect(screen.queryByText('Breakdown by category')).toBeNull();
   });
 
   it('groups labels into their categories', async () => {
@@ -342,22 +358,27 @@ describe('StatsView category totals', () => {
 
     // Scoped: Health holds only the sleep label, so its figure is identical to
     // the Sleep row's in the by-label section above.
-    const section = screen.getByText('Totals by category').closest('section')!;
+    const section = screen.getByText('Breakdown by category').closest('section')!;
     expect(within(section).getByText('Health')).toBeTruthy();
     expect(within(section).getByText('Work')).toBeTruthy();
-    expect(within(section).getByText('24h · 41%')).toBeTruthy();
+    // Health holds only sleep: 24h of the week's logged time.
+    expect(within(section).getByText('Health').closest('li')!.textContent).toContain('24h');
   });
 
-  it('drops sleep and divides by waking time in the exclude-sleep variant', async () => {
+  it('drops sleep from every section at once in the exclude-sleep variant', async () => {
     withCategories();
     renderView();
     await screen.findByText('88%');
 
     fireEvent.click(screen.getByRole('checkbox', { name: /exclude sleep/i }));
 
-    // Health held only the sleep label, so it disappears; Work is now 30h 30m
-    // of the 34h 30m of waking time rather than of the whole elapsed week.
+    // Health held only the sleep label, so it disappears — and with sleep gone
+    // from the denominator too, the remaining shares still account for all of
+    // what is left rather than summing to some fraction of the elapsed week.
     await waitFor(() => expect(screen.queryByText('Health')).toBeNull());
-    expect(screen.getByText('30h 30m · 88%')).toBeTruthy();
+    const shares = screen
+      .getAllByTestId('breakdown-share')
+      .map((el) => Number(el.textContent!.replace('%', '')));
+    expect(shares.reduce((a, b) => a + b, 0)).toBeGreaterThanOrEqual(99);
   });
 });
