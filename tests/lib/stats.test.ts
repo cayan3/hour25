@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   datesInRange,
+  dayExtremes,
   expectedSlots,
   periodRange,
   previousPeriodNow,
@@ -8,6 +9,7 @@ import {
   totalsByCategory,
   summarizePeriod,
   untrackedSlots,
+  weekdayWeekendSplit,
 } from '../../src/lib/stats';
 import type { DatedEntry } from '../../src/lib/merge';
 
@@ -397,5 +399,117 @@ describe('totalsByCategory', () => {
 
   it('returns nothing for an empty period', () => {
     expect(totalsByCategory([], categoryOf)).toEqual([]);
+  });
+});
+
+describe('weekdayWeekendSplit', () => {
+  const now = new Date(2026, 6, 20, 23, 59); // Mon 20 Jul 2026, end of day
+
+  it('separates Mon-Fri from Sat-Sun, keeping each side its own divisor', () => {
+    const entries = [
+      ...fill('2026-07-13', 16, 32, WORK),
+      ...fill('2026-07-14', 16, 32, WORK),
+      ...fill('2026-07-18', 20, 24, READING),
+    ];
+    const s = summarizePeriod(entries, periodRange('week', '2026-07-13'), SLEEP, now);
+    const split = weekdayWeekendSplit(s.byDate);
+
+    expect(split.weekday!.days).toBe(2);
+    expect(split.weekday!.byLabel).toEqual([{ labelId: WORK, slots: 32, minutes: 960 }]);
+    expect(split.weekend!.days).toBe(1);
+    expect(split.weekend!.byLabel).toEqual([{ labelId: READING, slots: 4, minutes: 120 }]);
+  });
+
+  it('is null on a side no day of which has elapsed yet, never zero', () => {
+    // Wed 15 Jul mid-morning: the week's weekend has not happened.
+    const midweek = new Date(2026, 6, 15, 10, 15);
+    const s = summarizePeriod(
+      fill('2026-07-13', 0, 10, WORK),
+      periodRange('week', '2026-07-15'),
+      SLEEP,
+      midweek,
+    );
+    const split = weekdayWeekendSplit(s.byDate);
+
+    expect(split.weekend).toBeNull();
+    expect(split.weekday).not.toBeNull();
+  });
+
+  it('distinguishes an elapsed-but-untracked side from an absent one', () => {
+    const s = summarizePeriod(
+      fill('2026-07-13', 0, 10, WORK),
+      periodRange('week', '2026-07-13'),
+      SLEEP,
+      now,
+    );
+    const split = weekdayWeekendSplit(s.byDate);
+
+    expect(split.weekend).not.toBeNull();
+    expect(split.weekend!.days).toBe(0);
+    expect(split.weekend!.byLabel).toEqual([]);
+  });
+});
+
+describe('dayExtremes', () => {
+  const now = new Date(2026, 6, 20, 23, 59); // Mon 20 Jul 2026, end of day
+
+  it('reports the highest and lowest waking-logged day', () => {
+    const entries = [
+      ...fill('2026-07-13', 16, 32, WORK), // 8h waking
+      ...fill('2026-07-14', 16, 24, WORK), // 4h waking
+      ...fill('2026-07-15', 16, 28, WORK), // 6h waking
+    ];
+    const s = summarizePeriod(entries, periodRange('week', '2026-07-13'), SLEEP, now);
+
+    expect(dayExtremes(s.byDate)).toEqual({
+      peak: { date: '2026-07-13', wakingMinutes: 480 },
+      lowest: { date: '2026-07-14', wakingMinutes: 240 },
+    });
+  });
+
+  it('ignores untracked days, which are absent rather than lowest', () => {
+    const s = summarizePeriod(
+      fill('2026-07-13', 16, 32, WORK),
+      periodRange('week', '2026-07-13'),
+      SLEEP,
+      now,
+    );
+
+    expect(dayExtremes(s.byDate).lowest!.date).toBe('2026-07-13');
+  });
+
+  it('discounts sleep, so the longest night is not the biggest day', () => {
+    const entries = [
+      ...fill('2026-07-13', 0, 40, SLEEP), // 20h asleep, 0h waking
+      ...fill('2026-07-14', 16, 20, WORK), // 2h waking
+    ];
+    const s = summarizePeriod(entries, periodRange('week', '2026-07-13'), SLEEP, now);
+
+    expect(dayExtremes(s.byDate).peak!.date).toBe('2026-07-14');
+  });
+
+  it('is null on both sides when nothing was tracked', () => {
+    const s = summarizePeriod([], periodRange('week', '2026-07-13'), SLEEP, now);
+
+    expect(dayExtremes(s.byDate)).toEqual({ peak: null, lowest: null });
+  });
+
+  it('makes peak and lowest the same day when only one was tracked', () => {
+    const s = summarizePeriod(
+      fill('2026-07-13', 16, 32, WORK),
+      periodRange('week', '2026-07-13'),
+      SLEEP,
+      now,
+    );
+    const { peak, lowest } = dayExtremes(s.byDate);
+
+    expect(peak!.date).toBe(lowest!.date);
+  });
+
+  it('resolves a tie to the earlier day, so the result is deterministic', () => {
+    const entries = [...fill('2026-07-13', 16, 24, WORK), ...fill('2026-07-14', 16, 24, WORK)];
+    const s = summarizePeriod(entries, periodRange('week', '2026-07-13'), SLEEP, now);
+
+    expect(dayExtremes(s.byDate).peak!.date).toBe('2026-07-13');
   });
 });

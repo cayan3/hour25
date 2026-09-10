@@ -235,3 +235,89 @@ export function totalsByCategory(
     .map(([categoryId, n]) => ({ categoryId, slots: n, minutes: n * CHUNK_MINUTES }))
     .sort((a, b) => b.slots - a.slots);
 }
+
+export interface DaySubsetTotals {
+  /** Tracked days in the subset — the divisor for its averages. */
+  days: number;
+  loggedSlots: number;
+  byLabel: LabelTotal[];
+}
+
+// Every slice on the Stats page is this fold over a filtered day list, which
+// is why per-day composition is worth carrying on DayTotal: a new slice costs
+// a predicate, not another pass over entries or another query.
+export function foldDays(days: DayTotal[]): DaySubsetTotals {
+  const slots = new Map<string, number>();
+  let logged = 0;
+  let tracked = 0;
+
+  for (const day of days) {
+    if (day.filledSlots > 0) tracked++;
+    logged += day.filledSlots;
+    for (const [labelId, n] of day.slotsByLabel) {
+      slots.set(labelId, (slots.get(labelId) ?? 0) + n);
+    }
+  }
+
+  return {
+    days: tracked,
+    loggedSlots: logged,
+    byLabel: [...slots.entries()]
+      .map(([labelId, n]) => ({ labelId, slots: n, minutes: n * CHUNK_MINUTES }))
+      .sort((a, b) => b.slots - a.slots || a.labelId.localeCompare(b.labelId)),
+  };
+}
+
+export interface WeekdayWeekendSplit {
+  /** Null when no day of that kind has elapsed in the period yet. */
+  weekday: DaySubsetTotals | null;
+  weekend: DaySubsetTotals | null;
+}
+
+const WEEKEND_DAYS = new Set([0, 6]); // Sunday, Saturday
+
+// Null and { days: 0 } mean different things and are rendered differently: a
+// week viewed on Wednesday has no weekend to report yet, which is not the same
+// fact as a finished week whose weekend went untracked.
+export function weekdayWeekendSplit(byDate: DayTotal[]): WeekdayWeekendSplit {
+  const elapsed = byDate.filter((d) => d.expectedSlots > 0);
+  const isWeekend = (d: DayTotal) => WEEKEND_DAYS.has(parseLocalDate(d.date).getDay());
+  const weekdays = elapsed.filter((d) => !isWeekend(d));
+  const weekends = elapsed.filter(isWeekend);
+
+  return {
+    weekday: weekdays.length > 0 ? foldDays(weekdays) : null,
+    weekend: weekends.length > 0 ? foldDays(weekends) : null,
+  };
+}
+
+export interface DayExtreme {
+  date: string;
+  wakingMinutes: number;
+}
+
+export interface DayExtremes {
+  peak: DayExtreme | null;
+  lowest: DayExtreme | null;
+}
+
+// Waking minutes, over tracked days only. Sleep is discounted or the longest
+// night wins every week; an untracked day is absent rather than the lowest,
+// because "you logged nothing" is a coverage fact, not a quiet day. Ties go to
+// the earlier date — byDate is in order and only a strict comparison replaces.
+export function dayExtremes(byDate: DayTotal[]): DayExtremes {
+  let peak: DayExtreme | null = null;
+  let lowest: DayExtreme | null = null;
+
+  for (const day of byDate) {
+    if (day.filledSlots === 0) continue;
+    const candidate = {
+      date: day.date,
+      wakingMinutes: (day.filledSlots - day.sleepSlots) * CHUNK_MINUTES,
+    };
+    if (peak === null || candidate.wakingMinutes > peak.wakingMinutes) peak = candidate;
+    if (lowest === null || candidate.wakingMinutes < lowest.wakingMinutes) lowest = candidate;
+  }
+
+  return { peak, lowest };
+}
