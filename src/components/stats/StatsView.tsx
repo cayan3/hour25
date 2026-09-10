@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useStats } from '../../hooks/useStats';
 import { BreakdownTable, type BreakdownRow } from './BreakdownTable';
+import { CoverageDetails } from './CoverageDetails';
 import { periodRange, shiftPeriod, type DayTotal, type PeriodKind } from '../../lib/stats';
 import { CHUNK_MINUTES, SLOTS_PER_DAY } from '../../lib/constants';
 import { formatDuration, localDateString, parseLocalDate } from '../../lib/time';
@@ -29,26 +30,6 @@ function periodHeading(kind: PeriodKind, start: string, end: string): string {
   }
   const short: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
   return `${day.toLocaleDateString(undefined, short)} – ${parseLocalDate(end).toLocaleDateString(undefined, short)}`;
-}
-
-function MetricCard({
-  title,
-  value,
-  caption,
-}: {
-  title: string;
-  value: string;
-  caption: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-      <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-        {title}
-      </p>
-      <p className="mt-1 text-xl font-semibold tabular-nums">{value}</p>
-      <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{caption}</p>
-    </div>
-  );
 }
 
 function DayBarRow({ day, sleepColor }: { day: DayTotal; sleepColor: string }) {
@@ -163,8 +144,6 @@ export function StatsView({
         (previousTrackedDays > 0 ? ` · previous ${kind} ${previousTrackedDays}` : '');
 
   const isCurrent = start === periodRange(kind, localDateString()).start;
-  const loggedPercent =
-    summary.expectedMinutes > 0 ? (summary.filledMinutes / summary.expectedMinutes) * 100 : 0;
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 p-3 md:p-4">
@@ -232,67 +211,6 @@ export function StatsView({
         </p>
       ) : (
         <>
-          {/* DESIGN §8 ordering: headline metric first, then the cards, then
-              the totals. */}
-          <section>
-            <h2 className="text-sm text-slate-500 dark:text-slate-400">Waking time logged</h2>
-            <p className="text-4xl font-semibold tabular-nums">
-              {summary.wakingPercent === null ? '—' : `${Math.round(summary.wakingPercent)}%`}
-            </p>
-            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-              {`${formatDuration(summary.wakingFilledMinutes)} of ${formatDuration(
-                summary.wakingExpectedMinutes,
-              )} waking time`}
-              {summary.sleepMinutes > 0 &&
-                ` · ${formatDuration(summary.sleepMinutes)} sleep excluded`}
-            </p>
-            {/* Compared against the same slice of the previous period, not the
-                whole of it — a Wednesday is measured against a Wednesday. The
-                sign carries the direction; nothing rides on colour alone. */}
-            {deltaPoints !== null && (
-              <p className="mt-0.5 text-sm text-slate-500 tabular-nums dark:text-slate-400">
-                {deltaPoints === 0
-                  ? `No change vs previous ${kind}`
-                  : `${deltaPoints > 0 ? '+' : '−'}${Math.abs(deltaPoints)} pts vs previous ${kind}`}
-              </p>
-            )}
-          </section>
-
-          <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            <MetricCard
-              title="Logged"
-              value={formatDuration(summary.filledMinutes)}
-              caption={`${Math.round(loggedPercent)}% of elapsed time`}
-            />
-            <MetricCard
-              title="Untracked"
-              value={formatDuration(summary.untrackedMinutes)}
-              caption="empty slots"
-            />
-            <MetricCard
-              title="Sleep"
-              value={sleepLabelName === null ? '—' : formatDuration(summary.sleepMinutes)}
-              caption={
-                sleepLabelName === null ? (
-                  <button
-                    type="button"
-                    onClick={onOpenSettings}
-                    className="rounded underline focus-visible:ring-2 focus-visible:ring-offset-2"
-                  >
-                    Set a sleep label
-                  </button>
-                ) : (
-                  `${sleepLabelName}, excluded below`
-                )
-              }
-            />
-            <MetricCard
-              title="Waking day"
-              value={formatDuration(summary.wakingExpectedMinutes)}
-              caption="elapsed, minus sleep"
-            />
-          </section>
-
           {kind !== 'day' && (
             <section>
               <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
@@ -363,6 +281,14 @@ export function StatsView({
               <BreakdownTable rows={categoryBreakdownRows} showPerDay={kind !== 'day'} />
             </section>
           )}
+
+          <CoverageDetails
+            kind={kind}
+            summary={summary}
+            sleepLabelName={sleepLabelName}
+            deltaPoints={deltaPoints}
+            onOpenSettings={onOpenSettings}
+          />
         </>
       )}
     </div>

@@ -91,16 +91,6 @@ const PREV_WEEK_ROWS = [
   ...serverRows('2026-07-08', 16, 21, WORK),
 ];
 
-// Shift a fixture date forward a week so the previous period holds an
-// identical shape to the current one.
-function addWeek(date: string): string {
-  const [y, m, d] = date.split('-').map(Number);
-  const shifted = new Date(y, m - 1, d - 7);
-  return `${shifted.getFullYear()}-${String(shifted.getMonth() + 1).padStart(2, '0')}-${String(
-    shifted.getDate(),
-  ).padStart(2, '0')}`;
-}
-
 const onOpenToday = vi.fn();
 const onOpenSettings = vi.fn();
 
@@ -135,11 +125,28 @@ afterEach(() => {
 });
 
 describe('StatsView', () => {
-  it('reads the current week and subtracts sleep from the headline metric', async () => {
+  it('reads the current week and keeps the coverage figures, demoted', async () => {
     renderView();
 
-    expect(await screen.findByText('88%')).toBeTruthy();
+    await screen.findByText('Deep work');
     expect(getEntriesForRange).toHaveBeenCalledWith(USER, '2026-07-13', '2026-07-19');
+
+    const disclosure = screen.getByRole('group', { name: /coverage/i }) as HTMLDetailsElement;
+    // Closed by default: the page leads with what the time went on, not with
+    // how much of it was logged.
+    expect(disclosure.open).toBe(false);
+    // The figures stay readable without opening it — on a Day, "still
+    // unlogged" is something the reader can act on right now.
+    expect(disclosure.textContent).toContain('88%');
+    expect(disclosure.textContent).toContain('untracked');
+  });
+
+  it('still reconciles sleep out of both sides once the coverage detail is opened', async () => {
+    renderView();
+    await screen.findByText('Deep work');
+
+    fireEvent.click(screen.getByText(/Coverage & data quality/));
+
     // Sleep excluded from both sides: 30h 30m of waking work out of 34h 30m.
     expect(screen.getByText(/30h 30m of 34h 30m waking time/)).toBeTruthy();
     expect(screen.getByText(/24h sleep excluded/)).toBeTruthy();
@@ -228,7 +235,7 @@ describe('StatsView', () => {
 
   it('switches the range it reads when the period changes', async () => {
     renderView();
-    await screen.findByText('88%');
+    await screen.findByText('Deep work');
 
     fireEvent.click(screen.getByRole('button', { name: 'month' }));
     await waitFor(() =>
@@ -243,7 +250,7 @@ describe('StatsView', () => {
 
   it('steps to the previous period and offers a way back to the current one', async () => {
     renderView();
-    await screen.findByText('88%');
+    await screen.findByText('Deep work');
     expect(screen.queryByRole('button', { name: /this week/i })).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: /previous week/i }));
@@ -256,14 +263,14 @@ describe('StatsView', () => {
     // its staleTime, so returning to it correctly issues no new read.
     fireEvent.click(screen.getByRole('button', { name: /this week/i }));
     await waitFor(() => expect(screen.queryByRole('button', { name: /this week/i })).toBeNull());
-    expect(await screen.findByText('88%')).toBeTruthy();
+    expect(await screen.findByText('Deep work')).toBeTruthy();
   });
 });
 
 describe('StatsView by-day bars', () => {
   it('renders one row per day of the period with its own waking percentage', async () => {
     renderView();
-    await screen.findByText('88%');
+    await screen.findByText('Deep work');
 
     // Mon and Tue fully elapsed; Tue lost 8 evening slots, so it trails Mon.
     expect(screen.getByText('Mon 13')).toBeTruthy();
@@ -274,7 +281,7 @@ describe('StatsView by-day bars', () => {
 
   it('names both series in a legend rather than leaving them to colour', async () => {
     renderView();
-    await screen.findByText('88%');
+    await screen.findByText('Deep work');
 
     const legend = screen.getByText('Waking').closest('p')!;
     expect(legend.textContent).toContain('Waking');
@@ -283,7 +290,7 @@ describe('StatsView by-day bars', () => {
 
   it('shows a dash for days the clock has not reached', async () => {
     renderView();
-    await screen.findByText('88%');
+    await screen.findByText('Deep work');
 
     // Thu-Sun have no elapsed time, so there is no percentage to state.
     expect(screen.getAllByText('—')).toHaveLength(4);
@@ -291,7 +298,7 @@ describe('StatsView by-day bars', () => {
 
   it('is hidden for a single-day period, where a per-day breakdown says nothing', async () => {
     renderView();
-    await screen.findByText('88%');
+    await screen.findByText('Deep work');
 
     fireEvent.click(screen.getByRole('button', { name: 'day' }));
     await waitFor(() => expect(screen.queryByText('By day')).toBeNull());
@@ -349,7 +356,7 @@ describe('StatsView category totals', () => {
 
   it('is hidden entirely for an account with no categories', async () => {
     renderView();
-    await screen.findByText('88%');
+    await screen.findByText('Deep work');
 
     expect(screen.queryByText('Breakdown by category')).toBeNull();
   });
@@ -357,7 +364,7 @@ describe('StatsView category totals', () => {
   it('groups labels into their categories', async () => {
     withCategories();
     renderView();
-    await screen.findByText('88%');
+    await screen.findByText('Deep work');
 
     // Scoped: Health holds only the sleep label, so its figure is identical to
     // the Sleep row's in the by-label section above.
@@ -371,7 +378,7 @@ describe('StatsView category totals', () => {
   it('drops sleep from every section at once in the exclude-sleep variant', async () => {
     withCategories();
     renderView();
-    await screen.findByText('88%');
+    await screen.findByText('Deep work');
 
     fireEvent.click(screen.getByRole('checkbox', { name: /exclude sleep/i }));
 
