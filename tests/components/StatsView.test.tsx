@@ -268,32 +268,42 @@ describe('StatsView', () => {
 });
 
 describe('StatsView by-day bars', () => {
-  it('renders one row per day of the period with its own waking percentage', async () => {
+  it('renders one row per day of the period with its logged time', async () => {
     renderView();
     await screen.findByText('Deep work');
 
-    // Mon and Tue fully elapsed; Tue lost 8 evening slots, so it trails Mon.
     expect(screen.getByText('Mon 13')).toBeTruthy();
     expect(screen.getByText('Sun 19')).toBeTruthy();
     const list = screen.getByText('Mon 13').closest('ul')!;
     expect(list.querySelectorAll('li')).toHaveLength(7);
   });
 
-  it('names both series in a legend rather than leaving them to colour', async () => {
+  it('describes each day’s composition in text, not only in the stack', async () => {
     renderView();
     await screen.findByText('Deep work');
 
-    const legend = screen.getByText('Waking').closest('p')!;
-    expect(legend.textContent).toContain('Waking');
-    expect(legend.textContent).toContain('Sleep');
+    // The bars are aria-hidden, so this sr-only line is the only route by
+    // which the stack reaches a screen reader.
+    const row = screen.getByText('Mon 13').closest('li')!;
+    expect(row.textContent).toContain('Deep work');
+    expect(row.textContent).toContain('Sleep');
   });
 
-  it('shows a dash for days the clock has not reached', async () => {
+  it('says a day the clock has not reached logged nothing, rather than showing a gap', async () => {
     renderView();
     await screen.findByText('Deep work');
 
-    // Thu-Sun have no elapsed time, so there is no percentage to state.
-    expect(screen.getAllByText('—')).toHaveLength(4);
+    const row = screen.getByText('Sun 19').closest('li')!;
+    expect(row.textContent).toContain('nothing logged');
+  });
+
+  it('names the best and the quietest tracked day', async () => {
+    renderView();
+    await screen.findByText('Deep work');
+
+    // Mon logged 16h awake, Wed only 2h 30m of an elapsed morning.
+    expect(screen.getByText(/best Mon 13/)).toBeTruthy();
+    expect(screen.getByText(/quietest Wed 15/)).toBeTruthy();
   });
 
   it('is hidden for a single-day period, where a per-day breakdown says nothing', async () => {

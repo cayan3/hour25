@@ -2,15 +2,9 @@ import { useState } from 'react';
 import { useStats } from '../../hooks/useStats';
 import { BreakdownTable, type BreakdownRow } from './BreakdownTable';
 import { CoverageDetails } from './CoverageDetails';
-import { periodRange, shiftPeriod, type DayTotal, type PeriodKind } from '../../lib/stats';
-import { CHUNK_MINUTES, SLOTS_PER_DAY } from '../../lib/constants';
-import { formatDuration, localDateString, parseLocalDate } from '../../lib/time';
-
-// The app's accent, matched to the "now" marker and the Today pill. Sleep uses
-// the user's own sleep-label colour, so the two series are always named in the
-// legend rather than left to be told apart by colour (DESIGN §10).
-const WAKING_COLOR = '#0284c7';
-const SLEEP_FALLBACK_COLOR = '#94a3b8';
+import { DayBars } from './DayBars';
+import { periodRange, shiftPeriod, type PeriodKind } from '../../lib/stats';
+import { localDateString, parseLocalDate } from '../../lib/time';
 
 const PERIODS: PeriodKind[] = ['day', 'week', 'month'];
 
@@ -30,54 +24,6 @@ function periodHeading(kind: PeriodKind, start: string, end: string): string {
   }
   const short: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
   return `${day.toLocaleDateString(undefined, short)} – ${parseLocalDate(end).toLocaleDateString(undefined, short)}`;
-}
-
-function DayBarRow({ day, sleepColor }: { day: DayTotal; sleepColor: string }) {
-  const elapsedPct = (day.expectedSlots / SLOTS_PER_DAY) * 100;
-  const sleepPct = (day.sleepSlots / SLOTS_PER_DAY) * 100;
-  const wakingPct = ((day.filledSlots - day.sleepSlots) / SLOTS_PER_DAY) * 100;
-  const wakingExpected = day.expectedSlots - day.sleepSlots;
-  const percent =
-    wakingExpected > 0
-      ? Math.round(((day.filledSlots - day.sleepSlots) / wakingExpected) * 100)
-      : null;
-  const date = parseLocalDate(day.date);
-
-  return (
-    <li className="flex items-center gap-3">
-      <span className="w-14 shrink-0 text-xs text-slate-500 tabular-nums dark:text-slate-400">
-        {/* Composed rather than asked of Intl: {weekday, day} with no month
-            renders as "13 Mon" in en-US, which reads as a garbled date. */}
-        {`${date.toLocaleDateString(undefined, { weekday: 'short' })} ${date.getDate()}`}
-      </span>
-      {/* Three layers: the whole 24h, the part of it that has elapsed, then the
-          logged segments. Every day's bar is the same width, so a short bar
-          means an unlogged day rather than a shorter one. */}
-      <span
-        aria-hidden="true"
-        className="relative h-2 flex-1 rounded bg-slate-100 dark:bg-slate-800/60"
-      >
-        <span
-          className="absolute inset-y-0 left-0 rounded bg-slate-200 dark:bg-slate-800"
-          style={{ width: `${elapsedPct}%` }}
-        />
-        <span
-          className="absolute inset-y-0 left-0 rounded-l"
-          style={{ width: `${wakingPct}%`, backgroundColor: WAKING_COLOR }}
-        />
-        <span
-          className="absolute inset-y-0"
-          style={{ left: `${wakingPct}%`, width: `${sleepPct}%`, backgroundColor: sleepColor }}
-        />
-      </span>
-      <span className="hidden w-16 shrink-0 text-right text-xs text-slate-500 tabular-nums dark:text-slate-400 sm:inline">
-        {day.expectedSlots === 0 ? '' : formatDuration(day.filledSlots * CHUNK_MINUTES)}
-      </span>
-      <span className="w-10 shrink-0 text-right text-xs tabular-nums text-slate-500 dark:text-slate-400">
-        {percent === null ? '—' : `${percent}%`}
-      </span>
-    </li>
-  );
 }
 
 // Phase 1.5 stats: daily/weekly/monthly totals and % of waking day, computed
@@ -105,11 +51,13 @@ export function StatsView({
     categoryRows,
     hasCategories,
     sleepLabelName,
-    sleepColor,
     trackedDays,
     previousTrackedDays,
+    extremes,
     deltaPoints,
   } = useStats(userId, kind, anchor, excludeSleep);
+
+  const barLabels = new Map(rows.map((row) => [row.labelId, { name: row.name, color: row.color }]));
 
   const labelRows: BreakdownRow[] = rows.map((row) => ({
     id: row.labelId,
@@ -212,41 +160,12 @@ export function StatsView({
       ) : (
         <>
           {kind !== 'day' && (
-            <section>
-              <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-                <h2 className="text-sm font-medium">By day</h2>
-                {/* The legend names both series next to their swatch, per
-                    DESIGN §10 — the bars are aria-hidden, so this is what
-                    makes them readable at all. */}
-                <p className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
-                  <span className="flex items-center gap-1.5">
-                    <span
-                      aria-hidden="true"
-                      className="h-2 w-2 rounded-sm"
-                      style={{ backgroundColor: WAKING_COLOR }}
-                    />
-                    Waking
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <span
-                      aria-hidden="true"
-                      className="h-2 w-2 rounded-sm"
-                      style={{ backgroundColor: sleepColor ?? SLEEP_FALLBACK_COLOR }}
-                    />
-                    {sleepLabelName ?? 'Sleep'}
-                  </span>
-                </p>
-              </div>
-              <ul className="space-y-1.5">
-                {summary.byDate.map((day) => (
-                  <DayBarRow
-                    key={day.date}
-                    day={day}
-                    sleepColor={sleepColor ?? SLEEP_FALLBACK_COLOR}
-                  />
-                ))}
-              </ul>
-            </section>
+            <DayBars
+              byDate={summary.byDate}
+              order={rows}
+              labelById={barLabels}
+              extremes={extremes}
+            />
           )}
 
           <section>
