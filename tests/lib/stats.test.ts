@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  compareByLabel,
   datesInRange,
   dayExtremes,
   expectedSlots,
@@ -511,5 +512,59 @@ describe('dayExtremes', () => {
     const s = summarizePeriod(entries, periodRange('week', '2026-07-13'), SLEEP, now);
 
     expect(dayExtremes(s.byDate).peak!.date).toBe('2026-07-13');
+  });
+});
+
+describe('compareByLabel', () => {
+  const now = new Date(2026, 6, 20, 23, 59); // Mon 20 Jul 2026, end of day
+  const week = (anchor: string, entries: DatedEntry[]) =>
+    summarizePeriod(entries, periodRange('week', anchor), SLEEP, now);
+
+  it('states the change as minutes per tracked day, not as a raw total', () => {
+    // Now: 8h over 1 tracked day. Before: 8h over 2 tracked days = 4h/day.
+    const current = week('2026-07-13', fill('2026-07-13', 16, 32, WORK));
+    const previous = week('2026-07-06', [
+      ...fill('2026-07-06', 16, 24, WORK),
+      ...fill('2026-07-07', 16, 24, WORK),
+    ]);
+
+    expect(compareByLabel(current, previous).get(WORK)).toEqual({
+      kind: 'measured',
+      previousMinutesPerDay: 240,
+      deltaMinutesPerDay: 240,
+    });
+  });
+
+  it('reads a label with no previous time as new, never as an infinite rise', () => {
+    const current = week('2026-07-13', fill('2026-07-13', 16, 32, WORK));
+    const previous = week('2026-07-06', fill('2026-07-06', 16, 32, READING));
+
+    expect(compareByLabel(current, previous).get(WORK)).toEqual({ kind: 'new' });
+  });
+
+  it('is unmeasurable when the previous period tracked nothing at all', () => {
+    // Dividing by zero tracked days would read as a rise from zero, which is a
+    // different and false claim.
+    const current = week('2026-07-13', fill('2026-07-13', 16, 32, WORK));
+    const previous = week('2026-07-06', []);
+
+    expect(compareByLabel(current, previous).get(WORK)).toEqual({ kind: 'unmeasurable' });
+  });
+
+  it('reports a fall as a negative delta', () => {
+    const current = week('2026-07-13', fill('2026-07-13', 16, 20, WORK));
+    const previous = week('2026-07-06', fill('2026-07-06', 16, 32, WORK));
+
+    expect(compareByLabel(current, previous).get(WORK)).toMatchObject({
+      kind: 'measured',
+      deltaMinutesPerDay: -360,
+    });
+  });
+
+  it('carries no entry for a label that only the previous period had', () => {
+    const current = week('2026-07-13', fill('2026-07-13', 16, 32, WORK));
+    const previous = week('2026-07-06', fill('2026-07-06', 16, 32, READING));
+
+    expect(compareByLabel(current, previous).has(READING)).toBe(false);
   });
 });

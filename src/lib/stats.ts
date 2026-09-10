@@ -321,3 +321,46 @@ export function dayExtremes(byDate: DayTotal[]): DayExtremes {
 
   return { peak, lowest };
 }
+
+export type LabelChange =
+  | { kind: 'measured'; previousMinutesPerDay: number; deltaMinutesPerDay: number }
+  | { kind: 'new' }
+  | { kind: 'unmeasurable' };
+
+// Keyed by the *current* period's labels: a label the previous period had and
+// this one does not is absent rather than reported as a fall to zero. Showing
+// those is a real idea and a separate one — it opens "how many do we list".
+//
+// Per tracked day on both sides, because that is the divisor the page states.
+// A previous period with nothing tracked is 'unmeasurable', never a rise from
+// zero: the latter is a claim about behaviour, this is an absence of data.
+export function compareByLabel(
+  current: PeriodSummary,
+  previous: PeriodSummary,
+): Map<string, LabelChange> {
+  const out = new Map<string, LabelChange>();
+
+  if (previous.trackedDays === 0) {
+    for (const total of current.byLabel) out.set(total.labelId, { kind: 'unmeasurable' });
+    return out;
+  }
+
+  const previousMinutes = new Map(previous.byLabel.map((t) => [t.labelId, t.minutes]));
+
+  for (const total of current.byLabel) {
+    const before = previousMinutes.get(total.labelId);
+    if (before === undefined) {
+      out.set(total.labelId, { kind: 'new' });
+      continue;
+    }
+    const previousPerDay = before / previous.trackedDays;
+    const currentPerDay = current.trackedDays > 0 ? total.minutes / current.trackedDays : 0;
+    out.set(total.labelId, {
+      kind: 'measured',
+      previousMinutesPerDay: previousPerDay,
+      deltaMinutesPerDay: currentPerDay - previousPerDay,
+    });
+  }
+
+  return out;
+}
