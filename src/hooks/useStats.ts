@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRangeEntries } from './useDayEntries';
+import type { DatedEntry } from '../lib/merge';
 import { useAllLabels } from './useLabels';
 import { useCategories } from './useCategories';
 import { useSettings } from './useSettings';
@@ -48,6 +49,8 @@ export interface StatsResult {
   start: string;
   end: string;
   summary: PeriodSummary;
+  /** The period's merged entries, for surfaces that need slot-level detail. */
+  entries: DatedEntry[];
   rows: StatsLabelRow[];
   categoryRows: StatsCategoryRow[];
   /** True once the user has at least one category — the section is noise without. */
@@ -196,6 +199,7 @@ export function useStats(
     start: range.start,
     end: range.end,
     summary,
+    entries,
     rows,
     categoryRows,
     hasCategories: (categories ?? []).length > 0,

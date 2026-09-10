@@ -433,3 +433,64 @@ describe('StatsView weekday and weekend', () => {
     );
   });
 });
+
+describe('StatsView day strip', () => {
+  const openDay = async () => {
+    // The shared mock only answers the week ranges; a Day period reads a
+    // single date, so serve Wednesday's slice of the same fixture.
+    getEntriesForRange.mockImplementation(async (_userId: string, start: string) => {
+      if (start === '2026-07-13') return WEEK_ROWS;
+      if (start === '2026-07-06') return PREV_WEEK_ROWS;
+      return WEEK_ROWS.filter((r) => r.date === start);
+    });
+    renderView();
+    await screen.findByTestId('label-breakdown');
+    fireEvent.click(screen.getByRole('button', { name: 'day' }));
+    return await screen.findByTestId('day-strip');
+  };
+
+  it('renders all 48 slots of the day', async () => {
+    const strip = await openDay();
+
+    expect(strip.querySelectorAll('[data-slot]')).toHaveLength(48);
+  });
+
+  it('distinguishes not-yet-elapsed slots from elapsed empty ones', async () => {
+    // Wed 10:15 is slot 20, and the fixture logs 0-21, so 21-47 are future.
+    const strip = await openDay();
+
+    expect(strip.querySelectorAll('[data-state="future"]').length).toBeGreaterThan(0);
+    expect(strip.querySelectorAll('[data-state="logged"]').length).toBe(21);
+  });
+
+  it('describes the day as runs in text, since the squares are decorative', async () => {
+    await openDay();
+
+    // 00:00-08:00 Sleep, then work through the current slot.
+    const summary = screen.getByTestId('day-strip-summary').textContent!;
+    expect(summary).toContain('0:00–8:00 Sleep');
+    expect(summary).toContain('Deep work');
+  });
+
+  it('highlights a label’s slots on keyboard focus, not only on hover', async () => {
+    // Hover-only would make this a desktop-mouse feature.
+    const strip = await openDay();
+    expect(strip.querySelector('[data-highlighted="true"]')).toBeNull();
+
+    const section = screen.getByTestId('label-breakdown');
+    fireEvent.focus(within(section).getAllByRole('button')[0]);
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('day-strip').querySelector('[data-highlighted="true"]'),
+      ).toBeTruthy(),
+    );
+  });
+
+  it('is hidden for a multi-day period', async () => {
+    renderView();
+    await screen.findByTestId('label-breakdown');
+
+    expect(screen.queryByTestId('day-strip')).toBeNull();
+  });
+});

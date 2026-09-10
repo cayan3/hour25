@@ -4,6 +4,7 @@ import { BreakdownTable, type BreakdownRow } from './BreakdownTable';
 import { CoverageDetails } from './CoverageDetails';
 import { DayBars } from './DayBars';
 import { PatternSection } from './PatternSection';
+import { DayStrip } from './DayStrip';
 import { periodRange, shiftPeriod, type PeriodKind } from '../../lib/stats';
 import { localDateString, parseLocalDate } from '../../lib/time';
 
@@ -43,11 +44,15 @@ export function StatsView({
   const [kind, setKind] = useState<PeriodKind>('week');
   const [anchor, setAnchor] = useState<string>(() => localDateString());
   const [excludeSleep, setExcludeSleep] = useState(false);
+  // Transient view state belonging to this surface alone, so local useState —
+  // Zustand is app-wide UI state only (CLAUDE.md).
+  const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const {
     loading,
     start,
     end,
     summary,
+    entries,
     rows,
     categoryRows,
     hasCategories,
@@ -174,6 +179,16 @@ export function StatsView({
             <PatternSection split={split} order={rows} labelById={barLabels} />
           )}
 
+          {kind === 'day' && (
+            <DayStrip
+              entries={entries}
+              expectedSlots={summary.byDate[0]?.expectedSlots ?? 0}
+              labelById={barLabels}
+              highlightedId={highlightedId}
+              onHighlight={setHighlightedId}
+            />
+          )}
+
           <section data-testid="label-breakdown">
             <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
               <h2 className="text-sm font-medium">Breakdown by label</h2>
@@ -195,7 +210,12 @@ export function StatsView({
                 {divisorCaption}
               </p>
             )}
-            <BreakdownTable rows={labelRows} showPerDay={kind !== 'day'} />
+            <BreakdownTable
+              rows={labelRows}
+              showPerDay={kind !== 'day'}
+              highlightedId={kind === 'day' ? highlightedId : null}
+              onHighlight={kind === 'day' ? setHighlightedId : undefined}
+            />
           </section>
 
           {/* Hidden entirely for an account with no categories: every label
