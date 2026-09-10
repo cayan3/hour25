@@ -128,7 +128,7 @@ describe('StatsView', () => {
   it('reads the current week and keeps the coverage figures, demoted', async () => {
     renderView();
 
-    await screen.findByText('Deep work');
+    await screen.findByTestId('label-breakdown');
     expect(getEntriesForRange).toHaveBeenCalledWith(USER, '2026-07-13', '2026-07-19');
 
     const disclosure = screen.getByRole('group', { name: /coverage/i }) as HTMLDetailsElement;
@@ -143,7 +143,7 @@ describe('StatsView', () => {
 
   it('still reconciles sleep out of both sides once the coverage detail is opened', async () => {
     renderView();
-    await screen.findByText('Deep work');
+    await screen.findByTestId('label-breakdown');
 
     fireEvent.click(screen.getByText(/Coverage & data quality/));
 
@@ -155,7 +155,7 @@ describe('StatsView', () => {
   it('states each label as a per-day average and a total, in text not only in the bar', async () => {
     renderView();
 
-    await screen.findByText('Deep work');
+    await screen.findByTestId('label-breakdown');
     // Three tracked days (Mon, Tue, Wed-so-far): 30h 30m of work averages
     // 10h 10m a day, and the divisor is stated because it moves.
     const workRow = screen.getAllByTestId('breakdown-share')[0].closest('li')!;
@@ -166,7 +166,7 @@ describe('StatsView', () => {
 
   it('divides shares by logged time, so the rows account for all of it', async () => {
     renderView();
-    await screen.findByText('Deep work');
+    await screen.findByTestId('label-breakdown');
 
     const shares = screen
       .getAllByTestId('breakdown-share')
@@ -198,8 +198,9 @@ describe('StatsView', () => {
 
     renderView();
 
-    await waitFor(() => expect(screen.getByText('Deep work')).toBeTruthy());
-    expect(screen.getByText('Deep work').closest('li')!.textContent).toContain('2h');
+    const section = await screen.findByTestId('label-breakdown');
+    await waitFor(() => expect(within(section).getByText('Deep work')).toBeTruthy());
+    expect(within(section).getByText('Deep work').closest('li')!.textContent).toContain('2h');
   });
 
   it('shows the empty state with a link to today when nothing is logged', async () => {
@@ -235,7 +236,7 @@ describe('StatsView', () => {
 
   it('switches the range it reads when the period changes', async () => {
     renderView();
-    await screen.findByText('Deep work');
+    await screen.findByTestId('label-breakdown');
 
     fireEvent.click(screen.getByRole('button', { name: 'month' }));
     await waitFor(() =>
@@ -250,7 +251,7 @@ describe('StatsView', () => {
 
   it('steps to the previous period and offers a way back to the current one', async () => {
     renderView();
-    await screen.findByText('Deep work');
+    await screen.findByTestId('label-breakdown');
     expect(screen.queryByRole('button', { name: /this week/i })).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: /previous week/i }));
@@ -263,14 +264,14 @@ describe('StatsView', () => {
     // its staleTime, so returning to it correctly issues no new read.
     fireEvent.click(screen.getByRole('button', { name: /this week/i }));
     await waitFor(() => expect(screen.queryByRole('button', { name: /this week/i })).toBeNull());
-    expect(await screen.findByText('Deep work')).toBeTruthy();
+    expect(await screen.findByTestId('label-breakdown')).toBeTruthy();
   });
 });
 
 describe('StatsView by-day bars', () => {
   it('renders one row per day of the period with its logged time', async () => {
     renderView();
-    await screen.findByText('Deep work');
+    await screen.findByTestId('label-breakdown');
 
     expect(screen.getByText('Mon 13')).toBeTruthy();
     expect(screen.getByText('Sun 19')).toBeTruthy();
@@ -280,7 +281,7 @@ describe('StatsView by-day bars', () => {
 
   it('describes each day’s composition in text, not only in the stack', async () => {
     renderView();
-    await screen.findByText('Deep work');
+    await screen.findByTestId('label-breakdown');
 
     // The bars are aria-hidden, so this sr-only line is the only route by
     // which the stack reaches a screen reader.
@@ -291,7 +292,7 @@ describe('StatsView by-day bars', () => {
 
   it('says a day the clock has not reached logged nothing, rather than showing a gap', async () => {
     renderView();
-    await screen.findByText('Deep work');
+    await screen.findByTestId('label-breakdown');
 
     const row = screen.getByText('Sun 19').closest('li')!;
     expect(row.textContent).toContain('nothing logged');
@@ -299,7 +300,7 @@ describe('StatsView by-day bars', () => {
 
   it('names the best and the quietest tracked day', async () => {
     renderView();
-    await screen.findByText('Deep work');
+    await screen.findByTestId('label-breakdown');
 
     // Mon logged 16h awake, Wed only 2h 30m of an elapsed morning.
     expect(screen.getByText(/best Mon 13/)).toBeTruthy();
@@ -308,7 +309,7 @@ describe('StatsView by-day bars', () => {
 
   it('is hidden for a single-day period, where a per-day breakdown says nothing', async () => {
     renderView();
-    await screen.findByText('Deep work');
+    await screen.findByTestId('label-breakdown');
 
     fireEvent.click(screen.getByRole('button', { name: 'day' }));
     await waitFor(() => expect(screen.queryByText('By day')).toBeNull());
@@ -319,7 +320,7 @@ describe('StatsView period comparison', () => {
   it('states each label as a change in minutes per tracked day', async () => {
     renderView();
 
-    await screen.findByText('Deep work');
+    await screen.findByTestId('label-breakdown');
     expect(getEntriesForRange).toHaveBeenCalledWith(USER, '2026-07-06', '2026-07-12');
     // Work: 10h 10m a day now against 7h 30m a day over the same slice of the
     // previous week, both across three tracked days.
@@ -344,7 +345,7 @@ describe('StatsView period comparison', () => {
     );
     renderView();
 
-    await screen.findByText('Deep work');
+    await screen.findByTestId('label-breakdown');
     expect(screen.queryByText(/\/day$/)).toBeNull();
     expect(screen.queryByText('no change')).toBeNull();
   });
@@ -366,7 +367,7 @@ describe('StatsView category totals', () => {
 
   it('is hidden entirely for an account with no categories', async () => {
     renderView();
-    await screen.findByText('Deep work');
+    await screen.findByTestId('label-breakdown');
 
     expect(screen.queryByText('Breakdown by category')).toBeNull();
   });
@@ -374,7 +375,7 @@ describe('StatsView category totals', () => {
   it('groups labels into their categories', async () => {
     withCategories();
     renderView();
-    await screen.findByText('Deep work');
+    await screen.findByTestId('label-breakdown');
 
     // Scoped: Health holds only the sleep label, so its figure is identical to
     // the Sleep row's in the by-label section above.
@@ -388,7 +389,7 @@ describe('StatsView category totals', () => {
   it('drops sleep from every section at once in the exclude-sleep variant', async () => {
     withCategories();
     renderView();
-    await screen.findByText('Deep work');
+    await screen.findByTestId('label-breakdown');
 
     fireEvent.click(screen.getByRole('checkbox', { name: /exclude sleep/i }));
 
@@ -400,5 +401,35 @@ describe('StatsView category totals', () => {
       .getAllByTestId('breakdown-share')
       .map((el) => Number(el.textContent!.replace('%', '')));
     expect(shares.reduce((a, b) => a + b, 0)).toBeGreaterThanOrEqual(99);
+  });
+});
+
+describe('StatsView weekday and weekend', () => {
+  it('splits each label into a weekday and a weekend average', async () => {
+    renderView();
+    await screen.findByTestId('label-breakdown');
+
+    const section = screen.getByRole('region', { name: /weekday/i });
+    expect(within(section).getByText('Deep work')).toBeTruthy();
+    expect(section.textContent).toMatch(/on weekdays/);
+  });
+
+  it('says a weekend has not happened yet rather than reporting it as zero', async () => {
+    // The fixture week is anchored on Wednesday, so Sat and Sun have not
+    // elapsed — an absence of data, not a week spent doing nothing.
+    renderView();
+    await screen.findByTestId('label-breakdown');
+
+    expect(screen.getByRole('region', { name: /weekday/i }).textContent).toMatch(/no weekend yet/);
+  });
+
+  it('is hidden for a single-day period, which has no split to make', async () => {
+    renderView();
+    await screen.findByTestId('label-breakdown');
+
+    fireEvent.click(screen.getByRole('button', { name: 'day' }));
+    await waitFor(() =>
+      expect(screen.queryByRole('region', { name: /weekday/i })).toBeNull(),
+    );
   });
 });

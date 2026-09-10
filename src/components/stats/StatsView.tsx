@@ -3,6 +3,7 @@ import { useStats } from '../../hooks/useStats';
 import { BreakdownTable, type BreakdownRow } from './BreakdownTable';
 import { CoverageDetails } from './CoverageDetails';
 import { DayBars } from './DayBars';
+import { PatternSection } from './PatternSection';
 import { periodRange, shiftPeriod, type PeriodKind } from '../../lib/stats';
 import { localDateString, parseLocalDate } from '../../lib/time';
 
@@ -53,6 +54,7 @@ export function StatsView({
     sleepLabelName,
     trackedDays,
     previousTrackedDays,
+    split,
     extremes,
     deltaPoints,
   } = useStats(userId, kind, anchor, excludeSleep);
@@ -168,7 +170,11 @@ export function StatsView({
             />
           )}
 
-          <section>
+          {kind !== 'day' && (
+            <PatternSection split={split} order={rows} labelById={barLabels} />
+          )}
+
+          <section data-testid="label-breakdown">
             <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
               <h2 className="text-sm font-medium">Breakdown by label</h2>
               {/* C-24's exclude-sleep variant, promoted from the category
