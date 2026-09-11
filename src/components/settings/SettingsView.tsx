@@ -15,6 +15,7 @@ import { RestorePanel } from './RestorePanel';
 import { SetAsidePanel } from '../sync/SetAsidePanel';
 import { FeedbackPanel } from './FeedbackPanel';
 import { YourDataPanel } from './YourDataPanel';
+import { LegalFooter } from './LegalFooter';
 import { advancedToolsEnabled } from '../../lib/advanced';
 
 // Rarely-used sections collapse by default (Week 5 feedback); the frequent
@@ -193,6 +194,8 @@ export function SettingsView({
           kind of burying that promise cannot survive. Renders its own
           bordered <section>. */}
       <YourDataPanel userId={userId} />
+
+      <LegalFooter />
     </div>
   );
 }
