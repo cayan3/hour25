@@ -2,7 +2,7 @@ import { useOnline } from '../../hooks/useOnline';
 import { usePendingCount } from '../../hooks/useSync';
 import { useQueueStatusStore } from '../../store/queueStatus';
 
-const FEEDBACK_EMAIL = 'hour25app@gmail.com';
+const FEEDBACK_EMAIL = 'feedback@hour25.app';
 
 const BUTTON =
   'inline-block min-h-11 rounded border border-slate-300 px-3 py-1.5 text-sm font-medium hover:bg-slate-100 focus-visible:ring-2 focus-visible:ring-offset-2 dark:border-slate-600 dark:hover:bg-slate-800';
