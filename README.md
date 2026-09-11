@@ -2,7 +2,7 @@
 ## TLDR
 Hour 25 is an accessible, user-tested productivity tool that helps you track exactly how you're spending your time. Every day is broken down into half-hour intervals that can be assigned different labels based on your activity. Time slots can be labeled any time and anywhere, whether that means planning ahead for the rest of your day or backfilling past entries you were too busy to track at the time. With custom color-coded labels, offline sync across multiple devices, and secure user authentication, Hour 25 makes it both easy and satisfying to understand where your energy is really going. 
 
-To try it out for yourself, visit [Hour 25](hour25.app)!
+To try it out for yourself, visit [Hour 25](https://hour25.app)!
 
 ..phew, elevator pitch done. If you wanna stick around (hi!), the rest of this README includes yap about the following: 
 - Description: what is this? why is this?? who even cares, and where's that music coming from???
