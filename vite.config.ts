@@ -23,8 +23,8 @@ export default defineConfig(({ mode }) => {
         // would discard whatever the user was typing. The toast asks first.
         registerType: 'prompt',
         manifest: {
-          name: 'Time Tracker',
-          short_name: 'Time Tracker',
+          name: 'Hour 25',
+          short_name: 'Hour 25',
           description: 'Track where your time goes, half an hour at a time.',
           start_url: '/',
           scope: '/',

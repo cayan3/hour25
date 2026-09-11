@@ -19,7 +19,7 @@ export function SignInView() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-50 dark:bg-slate-900">
       <div className="w-full max-w-sm rounded-lg border border-slate-200 p-8 text-center dark:border-slate-700">
-        <h1 className="mb-6 text-lg font-medium text-slate-900 dark:text-slate-50">Time Tracker</h1>
+        <h1 className="mb-6 text-lg font-medium text-slate-900 dark:text-slate-50">Hour 25</h1>
         <button
           type="button"
           onClick={handleSignIn}
